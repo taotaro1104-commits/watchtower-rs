@@ -1,7 +1,9 @@
 //! 通知層。Apprise 形式の宛先 URL、テンプレート、送信。
 
+mod apprise;
 mod dispatcher;
 mod error;
+mod foreign;
 mod mail;
 mod notifier;
 mod request;
@@ -10,8 +12,10 @@ mod target;
 mod template;
 mod worker;
 
+pub use apprise::AppriseApiNotifier;
 pub use dispatcher::{ChangeEvent, Dispatcher};
 pub use error::NotifyError;
+pub use foreign::allow_foreign_targets;
 pub use notifier::{HttpNotifier, Notifier};
 pub use smtp::{CompositeNotifier, SmtpNotifier};
 pub use target::NotifyTarget;

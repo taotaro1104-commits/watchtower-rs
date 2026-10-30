@@ -284,3 +284,63 @@ async fn watch_settings_beat_tag_settings_and_tag_beats_global() {
     let (delay, _) = run(&mut f).await;
     assert_eq!(delay, Some(Duration::from_secs(600)));
 }
+
+fn metric(m: &watchtower_metrics::Metrics, name: &str) -> f64 {
+    m.render(&watchtower_metrics::Gauges::default())
+        .lines()
+        .find(|l| !l.starts_with('#') && l.split([' ', '{']).next() == Some(name))
+        .and_then(|l| l.rsplit(' ').next())
+        .unwrap_or_else(|| panic!("{name} not found"))
+        .parse()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn checks_failures_changes_and_fetch_time_are_counted() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(&dir.path().join("t.db"), dir.path().join("snaps"))
+        .await
+        .unwrap();
+    let w = Watch::new(Url::parse("https://example.com/page").unwrap());
+    store.add_watch(&w).await.unwrap();
+    let metrics = Arc::new(watchtower_metrics::Metrics::new());
+    let cfg = CheckerConfig {
+        jitter_ratio: 0.0,
+        metrics: Arc::clone(&metrics),
+        ..Default::default()
+    };
+    // 基準 → 変化 → 変化なし → エラー
+    let script = vec![Ok("v1"), Ok("v2"), Ok("v2"), Err(FetchError::Status(500))];
+    let runner = StoreCheckRunner::new(store.clone(), FakeFetcher::new(script), cfg, None);
+    for _ in 0..4 {
+        runner.run(w.id, CancellationToken::new()).await;
+    }
+    assert_eq!(metric(&metrics, "watchtower_checks_total"), 4.0);
+    assert_eq!(metric(&metrics, "watchtower_check_failures_total"), 1.0);
+    assert_eq!(metric(&metrics, "watchtower_changes_total"), 1.0);
+    assert_eq!(
+        metric(&metrics, "watchtower_fetch_seconds_count"),
+        4.0,
+        "every fetch attempt is timed, including the failed one"
+    );
+}
+
+#[tokio::test]
+async fn a_cancelled_check_is_not_counted() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(&dir.path().join("t.db"), dir.path().join("snaps"))
+        .await
+        .unwrap();
+    let w = Watch::new(Url::parse("https://example.com/page").unwrap());
+    store.add_watch(&w).await.unwrap();
+    let metrics = Arc::new(watchtower_metrics::Metrics::new());
+    let cfg = CheckerConfig {
+        metrics: Arc::clone(&metrics),
+        ..Default::default()
+    };
+    let runner = StoreCheckRunner::new(store, FakeFetcher::new(vec![Ok("x")]), cfg, None);
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    runner.run(w.id, cancel).await;
+    assert_eq!(metric(&metrics, "watchtower_checks_total"), 0.0);
+}

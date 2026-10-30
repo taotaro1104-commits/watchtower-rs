@@ -4,7 +4,7 @@
 
 use askama::Template;
 use axum::extract::{Multipart, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::Form;
 use axum_extra::extract::cookie::CookieJar;
@@ -233,4 +233,89 @@ async fn read_form(mut mp: Multipart) -> Result<(String, Option<Vec<u8>>), Respo
         }
     }
     Ok((csrf, file))
+}
+
+// ---- バックアップのダウンロード ---------------------------------------------
+
+#[derive(Deserialize)]
+pub struct BackupForm {
+    #[serde(default)]
+    csrf: String,
+}
+
+/// 配信が終わる (または途中で切れる) と一時ディレクトリを消す。
+struct Cleanup {
+    stream: tokio_util::io::ReaderStream<tokio::fs::File>,
+    // 宣言順に破棄されるので、ファイルを閉じてから消える
+    _dir: tempfile::TempDir,
+}
+
+impl futures_util::Stream for Cleanup {
+    type Item = std::io::Result<axum::body::Bytes>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        std::pin::Pin::new(&mut self.stream).poll_next(cx)
+    }
+}
+
+pub async fn backup(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<BackupForm>,
+) -> Response {
+    let auth = match require(&state, &headers).await {
+        Ok(a) => a,
+        Err(r) => return r,
+    };
+    if let Err(r) = check_csrf(&auth, &form.csrf) {
+        return r;
+    }
+    // 同時に何本も作らせない (ディスクと CPU を使うため)
+    let Ok(_slot) = state.0.backup_slot.try_acquire() else {
+        return error_page(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "A backup is already running.",
+        );
+    };
+    let dir = match tempfile::tempdir() {
+        Ok(d) => d,
+        Err(e) => return internal(e),
+    };
+    let path = dir.path().join("backup.zip");
+    if let Err(e) = state.0.store.backup_to(&path).await {
+        return internal(e);
+    }
+    let file = match tokio::fs::File::open(&path).await {
+        Ok(f) => f,
+        Err(e) => return internal(e),
+    };
+    let len = file.metadata().await.map(|m| m.len()).ok();
+
+    let stamp =
+        time::format_description::parse_borrowed::<2>("[year][month][day]-[hour][minute][second]")
+            .ok()
+            .and_then(|f| time::OffsetDateTime::now_utc().format(&f).ok())
+            .unwrap_or_else(|| "export".into());
+    let body = axum::body::Body::from_stream(Cleanup {
+        stream: tokio_util::io::ReaderStream::new(file),
+        _dir: dir,
+    });
+    let mut res = Response::new(body);
+    let h = res.headers_mut();
+    h.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/zip"),
+    );
+    if let Ok(v) = HeaderValue::from_str(&format!(
+        "attachment; filename=\"watchtower-backup-{stamp}.zip\""
+    )) {
+        h.insert(header::CONTENT_DISPOSITION, v);
+    }
+    if let Some(len) = len {
+        h.insert(header::CONTENT_LENGTH, HeaderValue::from(len));
+    }
+    res
 }

@@ -13,6 +13,9 @@ pub enum StoreError {
     /// 入力が上限を超えている (利用者に見せてよい文面)。
     #[error("{0}")]
     LimitExceeded(String),
+    /// バックアップ・復元の失敗 (パスや原因だけで、資格情報は含まない)。
+    #[error("backup: {0}")]
+    Backup(String),
     #[error("corrupt data: {0}")]
     Corrupt(String),
 }

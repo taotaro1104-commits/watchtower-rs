@@ -150,11 +150,22 @@ impl Notifier for SmtpNotifier {
 pub struct CompositeNotifier {
     http: Arc<dyn Notifier>,
     smtp: Arc<dyn Notifier>,
+    apprise: Option<Arc<dyn Notifier>>,
 }
 
 impl CompositeNotifier {
     pub fn new(http: Arc<dyn Notifier>, smtp: Arc<dyn Notifier>) -> Self {
-        Self { http, smtp }
+        Self {
+            http,
+            smtp,
+            apprise: None,
+        }
+    }
+
+    /// 未実装のサービス (foreign な宛先) の転送先を設定する。
+    pub fn with_apprise(mut self, apprise: Arc<dyn Notifier>) -> Self {
+        self.apprise = Some(apprise);
+        self
     }
 }
 
@@ -168,6 +179,13 @@ impl Notifier for CompositeNotifier {
     ) -> Result<(), NotifyError> {
         if target.is_mail() {
             self.smtp.send(target, msg, cancel).await
+        } else if target.is_foreign() {
+            match &self.apprise {
+                Some(a) => a.send(target, msg, cancel).await,
+                None => Err(NotifyError::Delivery(
+                    "no Apprise API server is configured for this service".into(),
+                )),
+            }
         } else {
             self.http.send(target, msg, cancel).await
         }

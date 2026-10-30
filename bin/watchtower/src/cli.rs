@@ -30,6 +30,19 @@ pub enum Command {
     Import { file: PathBuf },
     /// Web UI のログインパスワードを設定する (標準入力から 1 行読む)
     SetPassword,
+    /// REST API のキーを新しく発行する (以前のキーは無効になる)
+    ApiKey,
+    /// RSS フィードのトークンを新しく発行する (以前のものは無効になる)
+    RssToken,
+    /// DB とスナップショットを 1 つの zip に書き出す (稼働中でも可。既存のファイルは上書きしない)
+    Backup { file: PathBuf },
+    /// `backup` で作った zip から復元する (既存のデータがあるときは --force が必要)
+    Restore {
+        file: PathBuf,
+        /// 既存のデータを消して置き換える
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

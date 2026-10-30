@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use time::OffsetDateTime;
 use tokio_util::sync::CancellationToken;
+use watchtower_metrics::Metrics;
 use watchtower_store::{Notification, Store};
 
 use crate::{Message, Notifier, NotifyError, NotifyTarget};
@@ -47,6 +48,7 @@ pub struct OutboxWorker {
     store: Store,
     notifier: Arc<dyn Notifier>,
     policy: RetryPolicy,
+    metrics: Arc<Metrics>,
 }
 
 impl OutboxWorker {
@@ -55,7 +57,14 @@ impl OutboxWorker {
             store,
             notifier,
             policy,
+            metrics: Arc::new(Metrics::new()),
         }
+    }
+
+    /// 送信・失敗の件数を数える先を差し替える。
+    pub fn with_metrics(mut self, metrics: Arc<Metrics>) -> Self {
+        self.metrics = metrics;
+        self
     }
 
     /// 送信時刻が来ている通知を 1 回ぶん処理し、試行した件数を返す。
@@ -116,6 +125,7 @@ impl OutboxWorker {
                 tracing::info!(id = item.id, "notification sent");
                 // 先に送信済みにする。記録だけ先に済ませると、マークに失敗して再送したとき履歴が二重になる
                 self.store.mark_notification_sent(item.id).await?;
+                self.metrics.notification_sent();
                 self.record(item, "notification_sent", now, None).await;
                 Ok(())
             }
@@ -173,6 +183,7 @@ impl OutboxWorker {
         error: &str,
     ) -> Result<(), NotifyError> {
         tracing::error!(id = item.id, error, "notification failed permanently");
+        self.metrics.notification_failed();
         self.record(item, "notification_failed", now, Some(error))
             .await;
         Ok(self.store.fail_notification(item.id, error).await?)

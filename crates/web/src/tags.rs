@@ -41,6 +41,7 @@ struct TagEditPage {
     title: String,
     interval: String,
     notify_muted: bool,
+    price_below: String,
     include_filters: String,
     exclude_filters: String,
     ignore_text: String,
@@ -150,6 +151,7 @@ pub async fn edit_page(
     let ConfigText {
         interval,
         notify_muted,
+        price_below,
         include_filters,
         exclude_filters,
         ignore_text,
@@ -164,6 +166,7 @@ pub async fn edit_page(
             title: tag.title,
             interval,
             notify_muted,
+            price_below,
             include_filters,
             exclude_filters,
             ignore_text,
@@ -182,6 +185,8 @@ pub struct EditForm {
     #[serde(default)]
     interval: String,
     notify_muted: Option<String>,
+    #[serde(default)]
+    price_below: String,
     #[serde(default)]
     include_filters: String,
     #[serde(default)]
@@ -220,6 +225,7 @@ pub async fn save(
         &ConfigInput {
             interval: &form.interval,
             notify_muted: form.notify_muted.is_some(),
+            price_below: &form.price_below,
             include_filters: &form.include_filters,
             exclude_filters: &form.exclude_filters,
             ignore_text: &form.ignore_text,

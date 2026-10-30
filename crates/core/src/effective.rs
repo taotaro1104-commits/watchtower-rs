@@ -20,6 +20,7 @@ pub struct EffectiveConfig {
     pub trigger_text: Vec<String>,
     pub notify_urls: Vec<String>,
     pub notify_muted: bool,
+    pub price_below: Option<f64>,
 }
 
 impl EffectiveConfig {
@@ -57,6 +58,10 @@ impl EffectiveConfig {
             trigger_text: merge(|l| &l.trigger_text),
             notify_urls: merge(|l| &l.notify_urls),
             notify_muted: layers.iter().find_map(|l| l.notify_muted).unwrap_or(false),
+            // 不正な値 (NaN・無限大・負) は無視して、下の層の指定に任せる
+            price_below: layers
+                .iter()
+                .find_map(|l| l.price_below.filter(|p| p.is_finite() && *p >= 0.0)),
         }
     }
 }

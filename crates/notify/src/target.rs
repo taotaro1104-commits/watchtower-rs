@@ -13,15 +13,37 @@ pub struct NotifyTarget {
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum Kind {
-    Json { url: Url },
-    Discord { id: String, token: String },
-    Slack { parts: [String; 3] },
-    Telegram { bot_token: String, chat_id: String },
-    Ntfy { endpoint: Url, topic: String },
-    Gotify { endpoint: Url, token: String },
+    Json {
+        url: Url,
+    },
+    Discord {
+        id: String,
+        token: String,
+    },
+    Slack {
+        parts: [String; 3],
+    },
+    Telegram {
+        bot_token: String,
+        chat_id: String,
+    },
+    Ntfy {
+        endpoint: Url,
+        topic: String,
+    },
+    Gotify {
+        endpoint: Url,
+        token: String,
+    },
     Mail(MailTarget),
+    /// 未実装のサービス。Apprise API サーバへそのまま転送する。
+    Foreign {
+        scheme: String,
+        url: String,
+    },
 }
 
+const MAX_FOREIGN_CHARS: usize = 2048;
 const NTFY_DEFAULT_ENDPOINT: &str = "https://ntfy.sh/";
 
 impl NotifyTarget {
@@ -61,6 +83,7 @@ impl NotifyTarget {
                     token,
                 }
             }
+            _ if crate::foreign::foreign_allowed() => foreign(&scheme, input.trim(), rest)?,
             _ => return Err(NotifyError::UnsupportedScheme(scheme)),
         };
         Ok(Self { kind })
@@ -75,6 +98,19 @@ impl NotifyTarget {
             Kind::Ntfy { .. } => "ntfy",
             Kind::Gotify { .. } => "gotify",
             Kind::Mail(_) => "mailto",
+            Kind::Foreign { .. } => "foreign",
+        }
+    }
+
+    pub fn is_foreign(&self) -> bool {
+        matches!(self.kind, Kind::Foreign { .. })
+    }
+
+    /// Apprise API サーバへ渡す元の URL (トークンを含む)。
+    pub(crate) fn foreign_url(&self) -> Option<&str> {
+        match &self.kind {
+            Kind::Foreign { url, .. } => Some(url),
+            _ => None,
         }
     }
 
@@ -88,6 +124,22 @@ impl NotifyTarget {
             _ => None,
         }
     }
+}
+
+/// 転送先で解釈される宛先。ここでは形だけを確かめる (空白・制御文字・極端な長さは拒否)。
+fn foreign(scheme: &str, url: &str, rest: &str) -> Result<Kind, NotifyError> {
+    if rest.is_empty() {
+        return Err(NotifyError::InvalidUrl("missing target"));
+    }
+    if url.chars().count() > MAX_FOREIGN_CHARS
+        || url.chars().any(|c| c.is_control() || c.is_whitespace())
+    {
+        return Err(NotifyError::InvalidUrl("malformed URL"));
+    }
+    Ok(Kind::Foreign {
+        scheme: scheme.to_string(),
+        url: url.to_string(),
+    })
 }
 
 fn http_scheme(tls: bool) -> &'static str {
@@ -178,6 +230,7 @@ impl fmt::Display for NotifyTarget {
                 if m.scheme_is_tls() { "s" } else { "" },
                 m.host
             ),
+            Kind::Foreign { scheme, .. } => write!(f, "{scheme}://***"),
             _ => write!(f, "{}://***", self.scheme()),
         }
     }

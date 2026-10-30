@@ -13,4 +13,6 @@ pub struct ConfigLayer {
     pub trigger_text: Vec<String>,
     pub notify_urls: Vec<String>,
     pub notify_muted: Option<bool>,
+    /// この価格以下になったら通知する (商品ページの構造化データから読む)。
+    pub price_below: Option<f64>,
 }

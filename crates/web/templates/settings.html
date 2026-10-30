@@ -29,6 +29,13 @@
 </form>
 <p class="muted small">Changing the password signs out every other session.</p>
 
+<h2>Backup</h2>
+<form method="post" action="/settings/backup" class="stack wide">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p class="muted small">Downloads a zip with the database and all snapshots. It contains notification URLs and password hashes, so keep it private. Restore it with <code>watchtower restore</code>.</p>
+  <button type="submit">Download backup</button>
+</form>
+
 <h2>Import from changedetection.io</h2>
 <form method="post" action="/settings/import" enctype="multipart/form-data" class="stack wide">
   <input type="hidden" name="csrf" value="{{ csrf }}">

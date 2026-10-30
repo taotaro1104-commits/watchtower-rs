@@ -8,6 +8,7 @@ use tokio::task::{Id as TaskId, JoinSet};
 use tokio::time::{sleep_until, timeout, Instant};
 use tokio_util::sync::CancellationToken;
 use watchtower_core::WatchId;
+use watchtower_metrics::Metrics;
 
 use crate::queue::DueQueue;
 use crate::runner::{CheckRunner, RunReport, ScheduledWatch};
@@ -21,6 +22,8 @@ pub struct SchedulerConfig {
     pub shutdown_grace: Duration,
     /// ジョブがパニックした場合の再試行までの待ち時間。
     pub panic_retry: Duration,
+    /// 実行待ち時間・実行中の数の計測先。
+    pub metrics: Arc<Metrics>,
 }
 
 impl Default for SchedulerConfig {
@@ -30,7 +33,24 @@ impl Default for SchedulerConfig {
             per_host_concurrency: 2,
             shutdown_grace: Duration::from_secs(30),
             panic_retry: Duration::from_secs(60),
+            metrics: Arc::new(Metrics::new()),
         }
+    }
+}
+
+/// 実行中の数を数える。ジョブがパニックしても Drop で戻る。
+struct InFlight(Arc<Metrics>);
+
+impl InFlight {
+    fn start(metrics: Arc<Metrics>) -> Self {
+        metrics.job_started();
+        Self(metrics)
+    }
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        self.0.job_finished();
     }
 }
 
@@ -197,15 +217,19 @@ impl Scheduler {
         let global = Arc::clone(&st.global);
         let runner = Arc::clone(&self.runner);
         let (stop, token) = (stop.clone(), job_cancel.clone());
+        let metrics = Arc::clone(&self.cfg.metrics);
 
         let handle = st.jobs.spawn(async move {
             // ホスト → グローバルの順に取り、片方だけ握ったまま待たない。
+            let queued = Instant::now();
             let _host = host_sem.acquire_owned().await;
             let _global = global.acquire_owned().await;
+            metrics.observe_queue_wait(queued.elapsed());
             if stop.is_cancelled() {
                 // 終了処理中に順番が回ってきたジョブは開始しない。
                 return (id, RunReport::unschedule());
             }
+            let _running = InFlight::start(Arc::clone(&metrics));
             (id, runner.run(id, token).await)
         });
         st.task_ids.insert(handle.id(), id);

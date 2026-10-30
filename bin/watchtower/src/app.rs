@@ -9,6 +9,7 @@ use uuid::Uuid;
 use watchtower_core::effective::MIN_INTERVAL_SECS;
 use watchtower_core::{ConfigLayer, Watch};
 use watchtower_fetch::{HttpFetcher, SsrfPolicy};
+use watchtower_metrics::Metrics;
 use watchtower_scheduler::{
     CheckOutcome, CheckRunner, CheckerConfig, Scheduler, SchedulerConfig, StoreCheckRunner,
 };
@@ -22,9 +23,24 @@ use crate::web_server;
 const OUTCOME_QUEUE: usize = 256;
 const MAX_IMPORT_BYTES: u64 = 256 * 1024 * 1024;
 
+/// `backup` で作った zip から復元する。DB を開く前に呼ぶ。
+pub async fn restore(cfg: &AppConfig, file: &std::path::Path, force: bool) -> Result<()> {
+    let opts = watchtower_store::RestoreOptions {
+        force,
+        ..Default::default()
+    };
+    let r = watchtower_store::restore_backup(file, &cfg.db_path(), &cfg.snapshot_dir(), &opts)
+        .await
+        .context("restoring the backup")?;
+    println!("restored {} files ({} bytes)", r.files, r.bytes);
+    Ok(())
+}
+
 pub struct App {
     cfg: AppConfig,
     store: Store,
+    /// チェッカー・スケジューラ・通知・API で共有する計測先。
+    metrics: Arc<Metrics>,
 }
 
 impl App {
@@ -35,7 +51,11 @@ impl App {
         let store = Store::open(&cfg.db_path(), cfg.snapshot_dir())
             .await
             .context("opening database")?;
-        Ok(Self { cfg, store })
+        Ok(Self {
+            cfg,
+            store,
+            metrics: Arc::new(Metrics::new()),
+        })
     }
 
     fn runner(&self, outcomes: Option<mpsc::Sender<CheckOutcome>>) -> StoreCheckRunner {
@@ -48,6 +68,7 @@ impl App {
                 ..Default::default()
             },
             snapshots_keep: self.cfg.snapshots_keep,
+            metrics: Arc::clone(&self.metrics),
             ..Default::default()
         };
         StoreCheckRunner::new(self.store.clone(), fetcher, cfg, outcomes)
@@ -177,12 +198,45 @@ impl App {
         Ok(())
     }
 
+    pub async fn api_key(&self) -> Result<()> {
+        let key = web_server::rotate_api_key(self.store.clone()).await?;
+        println!("API key: {key}");
+        println!("Send it in the x-api-key header. Any previous key no longer works.");
+        println!("This key is shown only once; only its hash is stored.");
+        Ok(())
+    }
+
+    pub async fn backup(&self, file: &std::path::Path) -> Result<()> {
+        let r = self
+            .store
+            .backup_to(file)
+            .await
+            .context("writing the backup")?;
+        println!(
+            "backup written to {} ({} files, {} bytes)",
+            file.display(),
+            r.files,
+            r.bytes
+        );
+        println!("The archive contains notification URLs and password hashes; keep it private.");
+        Ok(())
+    }
+
+    pub async fn rss_token(&self) -> Result<()> {
+        let token = web_server::rotate_rss_token(self.store.clone()).await?;
+        let base = self.cfg.base_url.trim_end_matches('/');
+        println!("Feed URL: {base}/rss?token={token}");
+        println!("Anyone with this URL can read the feed. Any previous token no longer works.");
+        Ok(())
+    }
+
     pub async fn run(&self) -> Result<()> {
         let (out_tx, out_rx) = mpsc::channel::<CheckOutcome>(OUTCOME_QUEUE);
         let runner = Arc::new(self.runner(Some(out_tx)));
         let sched_cfg = SchedulerConfig {
             global_concurrency: self.cfg.global_concurrency,
             per_host_concurrency: self.cfg.per_host_concurrency,
+            metrics: Arc::clone(&self.metrics),
             ..Default::default()
         };
 
@@ -197,12 +251,23 @@ impl App {
             on_signal.cancel();
         });
 
-        let worker = notifications::spawn_worker(&self.cfg, self.store.clone(), stop.clone());
+        let worker = notifications::spawn_worker(
+            &self.cfg,
+            self.store.clone(),
+            stop.clone(),
+            Arc::clone(&self.metrics),
+        );
 
         // 送信側を保持し続ける (閉じるとスケジューラが終了する)。Web UI からの追加・削除もここを通る。
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
-        let web =
-            web_server::spawn(&self.cfg, self.store.clone(), cmd_tx.clone(), stop.clone()).await?;
+        let web = web_server::spawn(
+            &self.cfg,
+            self.store.clone(),
+            cmd_tx.clone(),
+            stop.clone(),
+            Arc::clone(&self.metrics),
+        )
+        .await?;
         tracing::info!(
             watches = self.store.list_watches().await?.len(),
             "scheduler starting"

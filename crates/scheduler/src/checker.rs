@@ -7,7 +7,8 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 use watchtower_core::{ConfigLayer, EffectiveConfig, Watch, WatchId, WatchState};
-use watchtower_fetch::{FetchRequest, Fetcher};
+use watchtower_fetch::{FetchError, FetchRequest, Fetcher};
+use watchtower_metrics::Metrics;
 use watchtower_process::{diff, process, DiffResult};
 use watchtower_store::Store;
 
@@ -27,6 +28,8 @@ pub struct CheckerConfig {
     pub jitter_ratio: f64,
     /// ウォッチごとに保持するスナップショット数。
     pub snapshots_keep: usize,
+    /// チェック数・失敗数・取得時間の計測先。
+    pub metrics: Arc<Metrics>,
 }
 
 impl Default for CheckerConfig {
@@ -36,6 +39,7 @@ impl Default for CheckerConfig {
             backoff_base: Duration::from_secs(30),
             jitter_ratio: 0.1,
             snapshots_keep: 100,
+            metrics: Arc::new(Metrics::new()),
         }
     }
 }
@@ -101,11 +105,12 @@ impl StoreCheckRunner {
         let mut req = FetchRequest::get(w.url.clone());
         req.timeout = Duration::from_secs(cfg.timeout_secs);
         req.max_body_bytes = cfg.max_body_bytes;
-        let resp = self
-            .fetcher
-            .fetch(&req, cancel)
-            .await
-            .map_err(|e| e.to_string())?;
+        let fetch_started = Instant::now();
+        let fetched = self.fetcher.fetch(&req, cancel).await;
+        if !matches!(fetched, Err(FetchError::Cancelled)) {
+            self.cfg.metrics.observe_fetch(fetch_started.elapsed());
+        }
+        let resp = fetched.map_err(|e| e.to_string())?;
 
         let processed =
             process(&resp.body, resp.content_type.as_deref(), cfg).map_err(|e| e.to_string())?;
@@ -222,6 +227,7 @@ impl CheckRunner for StoreCheckRunner {
         state.last_checked_at = Some(now);
         let (delay, outcome) = match result {
             Ok(c) => {
+                self.cfg.metrics.check_finished(false, c.changed);
                 state.consecutive_errors = 0;
                 state.last_error = None;
                 if c.changed {
@@ -241,6 +247,7 @@ impl CheckRunner for StoreCheckRunner {
                 (delay, outcome)
             }
             Err(msg) => {
+                self.cfg.metrics.check_finished(true, false);
                 state.consecutive_errors = state.consecutive_errors.saturating_add(1);
                 state.last_error = Some(msg.clone());
                 let delay = error_delay(interval, self.cfg.backoff_base, state.consecutive_errors);

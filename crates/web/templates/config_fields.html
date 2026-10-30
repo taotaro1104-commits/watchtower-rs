@@ -2,6 +2,10 @@
     <input type="number" name="interval" value="{{ interval }}" min="1">
   </label>
 
+  <label>Notify when the price is at or below (blank = off)
+    <input type="text" inputmode="decimal" name="price_below" value="{{ price_below }}" placeholder="e.g. 19.99" maxlength="20" autocomplete="off">
+  </label>
+
   <h2>Filters</h2>
   <label><span class="lbl">Include (CSS selector, or <code>json:$.path</code>) &mdash; one per line</span>
     <textarea name="include_filters" rows="3">{{ include_filters }}</textarea>

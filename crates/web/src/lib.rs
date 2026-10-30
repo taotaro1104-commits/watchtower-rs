@@ -76,6 +76,8 @@ struct Inner {
     /// 同時に行う Argon2 検証の枠 (メモリ・CPU の枯渇を防ぐ)。
     verify_slots: Semaphore,
     stream_slots: Arc<Semaphore>,
+    /// バックアップは同時に 1 つだけ作る。
+    backup_slot: Semaphore,
     /// 終了要求。開いたままの SSE 接続を閉じさせるために使う。
     shutdown: CancellationToken,
     scheduler: Option<mpsc::Sender<Command>>,
@@ -104,6 +106,7 @@ impl AppState {
             limiter,
             verify_slots: Semaphore::new(MAX_CONCURRENT_VERIFY),
             stream_slots,
+            backup_slot: Semaphore::new(1),
             shutdown: CancellationToken::new(),
             scheduler,
         }))
@@ -172,6 +175,7 @@ pub fn router(state: AppState) -> Router {
         .route("/settings", get(settings::page))
         .route("/settings/notify", post(settings::save_notify))
         .route("/settings/password", post(settings::change_password))
+        .route("/settings/backup", post(settings::backup))
         .route(
             "/settings/import",
             post(settings::import).layer(DefaultBodyLimit::max(settings::MAX_IMPORT_BYTES)),

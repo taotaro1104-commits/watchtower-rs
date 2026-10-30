@@ -4,8 +4,11 @@ mod diff;
 mod error;
 mod extract;
 mod guard;
+mod jq;
 mod kind;
 mod normalize;
+pub mod product;
+mod xpath;
 
 pub use diff::{diff, DiffResult};
 pub use error::ProcessError;
@@ -21,6 +24,15 @@ pub struct Processed {
     pub triggered: bool,
 }
 
+/// 構造化データの価格が閾値以下か。本文の抽出方法とは独立に、ページ全体から読む。
+fn price_is_below(body: &str, threshold: Option<f64>) -> bool {
+    let Some(limit) = threshold else {
+        return false;
+    };
+    let doc = scraper::Html::parse_document(body);
+    product::extract(&doc).price.is_some_and(|p| p <= limit)
+}
+
 pub fn process(
     body: &str,
     content_type: Option<&str>,
@@ -33,7 +45,8 @@ pub fn process(
         ContentKind::Text => body.to_string(),
     };
     let text = normalize::normalize(&raw, &cfg.ignore_text);
-    let triggered = normalize::is_triggered(&text, &cfg.trigger_text);
+    let triggered = normalize::is_triggered(&text, &cfg.trigger_text)
+        || (kind == ContentKind::Html && price_is_below(body, cfg.price_below));
     let hash = *blake3::hash(text.as_bytes()).as_bytes();
     Ok(Processed {
         text,

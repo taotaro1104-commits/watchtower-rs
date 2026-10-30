@@ -20,6 +20,11 @@ const NTFY_LIMIT: usize = 4096;
 impl NotifyTarget {
     pub fn build_request(&self, msg: &Message) -> Result<FetchRequest, NotifyError> {
         let (url, headers, payload) = match &self.kind {
+            Kind::Foreign { .. } => {
+                return Err(NotifyError::InvalidUrl(
+                    "foreign targets are forwarded to an Apprise API server",
+                ));
+            }
             Kind::Mail(_) => {
                 return Err(NotifyError::InvalidUrl(
                     "email targets are not sent over HTTP",
@@ -91,7 +96,11 @@ fn fixed(url: &str) -> Result<Url, NotifyError> {
     Url::parse(url).map_err(|_| NotifyError::InvalidUrl("malformed URL"))
 }
 
-fn post_json(url: Url, mut headers: Vec<(String, String)>, payload: &Value) -> FetchRequest {
+pub(crate) fn post_json(
+    url: Url,
+    mut headers: Vec<(String, String)>,
+    payload: &Value,
+) -> FetchRequest {
     headers.push(("Content-Type".into(), "application/json".into()));
     let mut req = FetchRequest::get(url);
     req.method = Method::POST;

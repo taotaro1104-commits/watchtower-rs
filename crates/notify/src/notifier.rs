@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
-use watchtower_fetch::{FetchError, Fetcher};
+use watchtower_fetch::{FetchError, FetchRequest, Fetcher};
 
 use crate::{Message, NotifyError, NotifyTarget};
 
@@ -36,15 +36,24 @@ impl Notifier for HttpNotifier {
         cancel: CancellationToken,
     ) -> Result<(), NotifyError> {
         let req = target.build_request(msg)?;
-        self.fetcher
-            .fetch(&req, cancel)
-            .await
-            .map(drop)
-            .map_err(|e| match e {
-                FetchError::Cancelled => NotifyError::Cancelled,
-                other => NotifyError::Delivery(describe(&other)),
-            })
+        deliver(&self.fetcher, &req, cancel).await
     }
+}
+
+/// リクエストを送り、結果を通知用のエラーに直す (URL や資格情報は含めない)。
+pub(crate) async fn deliver(
+    fetcher: &Arc<dyn Fetcher>,
+    req: &FetchRequest,
+    cancel: CancellationToken,
+) -> Result<(), NotifyError> {
+    fetcher
+        .fetch(req, cancel)
+        .await
+        .map(drop)
+        .map_err(|e| match e {
+            FetchError::Cancelled => NotifyError::Cancelled,
+            other => NotifyError::Delivery(describe(&other)),
+        })
 }
 
 /// Discord / Slack / Telegram は URL にトークンを含むため、下位のエラー文字列

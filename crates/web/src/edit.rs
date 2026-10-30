@@ -23,6 +23,8 @@ use crate::handlers::{
 use crate::AppState;
 
 /// 1 項目あたりの行数・1 行あたりの文字数の上限。
+/// 価格の閾値として受け付ける最大値。
+const MAX_PRICE: f64 = 1e12;
 const MAX_LINES: usize = 50;
 const MAX_LINE_CHARS: usize = 500;
 /// 1 つのウォッチに付けられるタグ数の上限。
@@ -45,6 +47,7 @@ struct EditPage {
     tags: Vec<TagOption>,
     interval: String,
     notify_muted: bool,
+    price_below: String,
     include_filters: String,
     exclude_filters: String,
     ignore_text: String,
@@ -56,6 +59,7 @@ struct EditPage {
 pub(crate) struct ConfigText {
     pub interval: String,
     pub notify_muted: bool,
+    pub price_below: String,
     pub include_filters: String,
     pub exclude_filters: String,
     pub ignore_text: String,
@@ -70,6 +74,7 @@ pub(crate) fn config_text(c: &ConfigLayer) -> ConfigText {
             .map(|n| n.to_string())
             .unwrap_or_default(),
         notify_muted: c.notify_muted == Some(true),
+        price_below: c.price_below.map(|p| p.to_string()).unwrap_or_default(),
         include_filters: c.include_filters.join("\n"),
         exclude_filters: c.exclude_filters.join("\n"),
         ignore_text: c.ignore_text.join("\n"),
@@ -115,6 +120,7 @@ pub async fn edit_page(
             tags,
             interval: c.interval,
             notify_muted: c.notify_muted,
+            price_below: c.price_below,
             include_filters: c.include_filters,
             exclude_filters: c.exclude_filters,
             ignore_text: c.ignore_text,
@@ -128,6 +134,7 @@ pub async fn edit_page(
 pub(crate) struct ConfigInput<'a> {
     pub interval: &'a str,
     pub notify_muted: bool,
+    pub price_below: &'a str,
     pub include_filters: &'a str,
     pub exclude_filters: &'a str,
     pub ignore_text: &'a str,
@@ -156,11 +163,26 @@ fn lines(raw: &str, label: &str) -> Result<Vec<String>, Response> {
     Ok(items)
 }
 
+/// 価格の閾値。空欄は解除。有限で 0 以上、上限以下の数だけ受け付ける。
+fn parse_price_below(raw: &str) -> Result<Option<f64>, Response> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    match raw.parse::<f64>() {
+        Ok(p) if p.is_finite() && (0.0..=MAX_PRICE).contains(&p) => Ok(Some(p)),
+        _ => Err(bad_request(
+            "The price threshold must be a plain number such as 19.99.",
+        )),
+    }
+}
+
 /// 入力を検証して `c` に反映する。どれか 1 つでも不正なら `c` は変更しない。
 pub(crate) fn apply_config(c: &mut ConfigLayer, input: &ConfigInput) -> Result<(), Response> {
     let mut next = c.clone();
     next.check_interval_secs = parse_interval(input.interval)?;
     next.notify_muted = input.notify_muted.then_some(true);
+    next.price_below = parse_price_below(input.price_below)?;
     next.include_filters = lines(input.include_filters, "Include filters")?;
     next.exclude_filters = lines(input.exclude_filters, "Exclude filters")?;
     next.ignore_text = lines(input.ignore_text, "Ignore text")?;
@@ -189,6 +211,8 @@ pub struct EditForm {
     interval: String,
     paused: Option<String>,
     notify_muted: Option<String>,
+    #[serde(default)]
+    price_below: String,
     #[serde(default)]
     include_filters: String,
     #[serde(default)]
@@ -276,6 +300,7 @@ fn apply(
         &ConfigInput {
             interval: &form.interval,
             notify_muted: form.notify_muted.is_some(),
+            price_below: &form.price_below,
             include_filters: &form.include_filters,
             exclude_filters: &form.exclude_filters,
             ignore_text: &form.ignore_text,

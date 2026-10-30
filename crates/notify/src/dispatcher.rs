@@ -22,7 +22,7 @@ fn truncate_chars(s: &str, max: usize) -> String {
 pub struct ChangeEvent {
     pub watch_id: WatchId,
     pub diff: DiffResult,
-    /// `trigger_text` に一致した。
+    /// `trigger_text` に一致した、または価格が `price_below` 以下になった。
     pub triggered: bool,
 }
 
@@ -68,8 +68,9 @@ impl Dispatcher {
         if cfg.notify_muted || cfg.notify_urls.is_empty() {
             return Ok(0);
         }
-        // トリガーテキストを設定したウォッチは、一致したときだけ通知する。
-        if !cfg.trigger_text.is_empty() && !ev.triggered {
+        // トリガーテキストか価格の閾値を設定したウォッチは、条件に合ったときだけ通知する。
+        let gated = !cfg.trigger_text.is_empty() || cfg.price_below.is_some();
+        if gated && !ev.triggered {
             return Ok(0);
         }
 

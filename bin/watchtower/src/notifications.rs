@@ -9,9 +9,10 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use watchtower_core::ConfigLayer;
 use watchtower_fetch::{HttpFetcher, SsrfPolicy};
+use watchtower_metrics::Metrics;
 use watchtower_notify::{
-    ChangeEvent, CompositeNotifier, Dispatcher, HttpNotifier, NotifyTarget, OutboxWorker,
-    RetryPolicy, SmtpNotifier, TemplateSet,
+    AppriseApiNotifier, ChangeEvent, CompositeNotifier, Dispatcher, HttpNotifier, NotifyTarget,
+    OutboxWorker, RetryPolicy, SmtpNotifier, TemplateSet,
 };
 use watchtower_scheduler::CheckOutcome;
 use watchtower_store::Store;
@@ -30,18 +31,26 @@ pub fn validate_targets(urls: &[String]) -> anyhow::Result<()> {
 }
 
 /// 送信ワーカーを起動する。`stop` でキャンセルされるまで動く。
-pub fn spawn_worker(cfg: &AppConfig, store: Store, stop: CancellationToken) -> JoinHandle<()> {
+pub fn spawn_worker(
+    cfg: &AppConfig,
+    store: Store,
+    stop: CancellationToken,
+    metrics: Arc<Metrics>,
+) -> JoinHandle<()> {
     // HTTP 系も SMTP も同じ SSRF ポリシー (許可 IP) に従う
     let policy = SsrfPolicy::with_allowed_ips(cfg.allowed_ips.clone());
     let http = Arc::new(HttpNotifier::new(Arc::new(HttpFetcher::new(
         policy.clone(),
     ))));
-    let smtp = Arc::new(SmtpNotifier::new(Arc::new(policy)));
-    let worker = OutboxWorker::new(
-        store,
-        Arc::new(CompositeNotifier::new(http, smtp)),
-        RetryPolicy::default(),
-    );
+    let smtp = Arc::new(SmtpNotifier::new(Arc::new(policy.clone())));
+    let mut composite = CompositeNotifier::new(http, smtp);
+    // main で検証済みなので、ここでの失敗は設定なしと同じに扱う
+    if let Ok(Some(url)) = cfg.apprise_url() {
+        let fetcher = Arc::new(HttpFetcher::new(policy));
+        composite = composite.with_apprise(Arc::new(AppriseApiNotifier::new(url, fetcher)));
+    }
+    let worker =
+        OutboxWorker::new(store, Arc::new(composite), RetryPolicy::default()).with_metrics(metrics);
     tokio::spawn(async move { worker.run(OUTBOX_POLL, stop).await })
 }
 

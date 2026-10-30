@@ -19,6 +19,7 @@ tracing = "0.1.44"
 url = "2.5.8"
 watchtower-core = { version = "0.1.0", path = "../core" }
 watchtower-fetch = { version = "0.1.0", path = "../fetch" }
+watchtower-metrics = { version = "0.1.0", path = "../metrics" }
 watchtower-process = { version = "0.1.0", path = "../process" }
 watchtower-store = { version = "0.1.0", path = "../store" }
 

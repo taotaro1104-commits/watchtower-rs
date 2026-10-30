@@ -28,6 +28,8 @@ pub struct AppConfig {
     pub listen: SocketAddr,
     /// HTTPS の背後で使うとき true (セッション Cookie に Secure を付ける)。
     pub secure_cookies: bool,
+    /// 未実装のサービスの通知を転送する Apprise API サーバ (例: `http://apprise:8000`)。
+    pub apprise_api_url: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -44,6 +46,7 @@ impl Default for AppConfig {
             base_url: "http://localhost:5000".into(),
             listen: SocketAddr::from(([127, 0, 0, 1], 5000)),
             secure_cookies: false,
+            apprise_api_url: None,
         }
     }
 }
@@ -55,6 +58,26 @@ impl AppConfig {
             .merge(Env::prefixed(ENV_PREFIX).ignore(&["config"]))
             .extract()
             .map_err(Box::new)
+    }
+
+    /// 転送先の Apprise API の URL。http(s) で、ユーザー情報を含まないものだけ受け付ける。
+    pub fn apprise_url(&self) -> anyhow::Result<Option<url::Url>> {
+        let Some(raw) = self
+            .apprise_api_url
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+        else {
+            return Ok(None);
+        };
+        let url = url::Url::parse(raw.trim())
+            .map_err(|_| anyhow::anyhow!("apprise_api_url is not a valid URL"))?;
+        if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+            anyhow::bail!("apprise_api_url must be an http(s) URL");
+        }
+        if !url.username().is_empty() || url.password().is_some() {
+            anyhow::bail!("apprise_api_url must not contain credentials");
+        }
+        Ok(Some(url))
     }
 
     pub fn db_path(&self) -> PathBuf {
