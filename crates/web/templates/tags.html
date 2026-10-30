@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Tags - watchtower{% endblock %}
+{% block nav %}<a href="/">All watches</a>{% endblock %}
+{% block content %}
+<h1>Tags</h1>
+<p class="muted">Settings on a tag (interval, filters, notification URLs) apply to every watch that has it.</p>
+<form method="post" action="/tags" class="add">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="text" name="title" placeholder="New tag name" required maxlength="100">
+  <button type="submit">Add tag</button>
+</form>
+{% if rows.is_empty() %}
+<p class="muted">No tags yet.</p>
+{% else %}
+<table>
+  <thead><tr><th>Tag</th><th>Watches</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a href="/tags/{{ r.id }}/edit">{{ r.title }}</a></td>
+      <td>{{ r.watches }} watch{% if r.watches != 1 %}es{% endif %}</td>
+      <td>
+        <form method="post" action="/tags/{{ r.id }}/delete" class="inline">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

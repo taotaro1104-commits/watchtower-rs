@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}History - watchtower{% endblock %}
+{% block nav %}<a href="/">All watches</a>{% endblock %}
+{% block content %}
+<h1>History</h1>
+{% if rows.is_empty() %}
+<p class="muted">Nothing has happened yet.</p>
+{% else %}
+<table>
+  <thead><tr><th>Time</th><th>Event</th><th>Watch</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td class="small">{{ r.at }}</td>
+      <td>{{ r.kind }}</td>
+      <td>{% if let Some(id) = r.watch_id %}{% if r.watch_label.is_empty() %}<span class="muted">(deleted watch)</span>{% else %}<a href="/watches/{{ id }}">{{ r.watch_label }}</a>{% endif %}{% endif %}</td>
+      <td class="small">{{ r.detail }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="/static/app.js" defer></script>{% endblock %}

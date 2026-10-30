@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block nav %}
+<a href="/events">History</a>
+<a href="/tags">Tags</a>
+<a href="/settings">Settings</a>
+<form method="post" action="/logout" class="inline">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button type="submit" class="link">Sign out</button>
+</form>
+{% endblock %}
+{% block content %}
+<h1>Watches</h1>
+<form method="post" action="/watches" class="add">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="url" name="url" placeholder="https://example.com/" required maxlength="2048">
+  <input type="text" name="title" placeholder="Title (optional)" maxlength="200">
+  <input type="number" name="interval" placeholder="Interval (s)" min="1">
+  <button type="submit">Add</button>
+</form>
+{% if rows.is_empty() %}
+<p class="muted">No watches yet.</p>
+{% else %}
+<table>
+  <thead><tr><th>Watch</th><th>Last checked</th><th>Last changed</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr{% if r.error.is_some() %} class="failing"{% endif %}>
+      <td>
+        <a href="/watches/{{ r.id }}">{% if r.title.is_empty() %}{{ r.url }}{% else %}{{ r.title }}{% endif %}</a>
+        {% if r.paused %}<span class="badge">paused</span>{% endif %}
+        <div class="muted small">{{ r.url }}</div>
+        {% if let Some(e) = r.error %}<div class="error small">{{ e }}</div>{% endif %}
+      </td>
+      <td>{{ r.last_checked }}</td>
+      <td>{{ r.last_changed }}</td>
+      <td>
+        <form method="post" action="/watches/{{ r.id }}/delete" class="inline">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="/static/app.js" defer></script>{% endblock %}

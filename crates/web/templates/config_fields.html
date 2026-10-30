@@ -1,0 +1,23 @@
+  <label>Check interval (seconds, blank = default)
+    <input type="number" name="interval" value="{{ interval }}" min="1">
+  </label>
+
+  <h2>Filters</h2>
+  <label><span class="lbl">Include (CSS selector, or <code>json:$.path</code>) &mdash; one per line</span>
+    <textarea name="include_filters" rows="3">{{ include_filters }}</textarea>
+  </label>
+  <label>Exclude (CSS selector) &mdash; one per line
+    <textarea name="exclude_filters" rows="3">{{ exclude_filters }}</textarea>
+  </label>
+  <label>Ignore lines containing &mdash; one per line
+    <textarea name="ignore_text" rows="3">{{ ignore_text }}</textarea>
+  </label>
+  <label>Notify only when text appears &mdash; one per line
+    <textarea name="trigger_text" rows="3">{{ trigger_text }}</textarea>
+  </label>
+
+  <h2>Notifications</h2>
+  <label><span class="lbl">Notification URLs (e.g. <code>discord://id/token</code>) &mdash; one per line</span>
+    <textarea name="notify_urls" rows="3" autocomplete="off" spellcheck="false">{{ notify_urls }}</textarea>
+  </label>
+  <label class="check"><input type="checkbox" name="notify_muted"{% if notify_muted %} checked{% endif %}> Mute notifications</label>

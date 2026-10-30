@@ -1,0 +1,25 @@
+[package]
+name = "watchtower-fetch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait = "0.1.92"
+bytes = "1.12.1"
+chardetng = "1.0.0"
+encoding_rs = "0.8.42"
+futures-util = "0.3.34"
+http = "1.5.0"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "gzip", "brotli", "cookies", "stream"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time"] }
+tokio-util = "0.7.20"
+url = "2.5.8"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time"] }
+wiremock = "0.6.5"

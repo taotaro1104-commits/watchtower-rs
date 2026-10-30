@@ -1,0 +1,22 @@
+[package]
+name = "watchtower-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json = "1.0.154"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
+thiserror = "2.0.21"
+time = "0.3.55"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "fs"] }
+url = "2.5.8"
+uuid = { version = "1.29.0", features = ["v4"] }
+watchtower-core = { version = "0.1.0", path = "../core" }
+zstd = "0.14.3"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"

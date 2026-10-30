@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Settings - watchtower{% endblock %}
+{% block nav %}<a href="/">All watches</a>{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<h2>Notifications for all watches</h2>
+<form method="post" action="/settings/notify" class="stack wide">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label><span class="lbl">Notification URLs (e.g. <code>discord://id/token</code>) &mdash; one per line</span>
+    <textarea name="notify_urls" rows="4" autocomplete="off" spellcheck="false">{{ notify_urls }}</textarea>
+  </label>
+  <button type="submit">Save</button>
+</form>
+
+<h2>Change password</h2>
+<form method="post" action="/settings/password" class="stack wide">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>Current password
+    <input type="password" name="current" autocomplete="current-password" required>
+  </label>
+  <label>New password (at least {{ min_password }} characters)
+    <input type="password" name="new" autocomplete="new-password" required minlength="{{ min_password }}">
+  </label>
+  <label>Confirm new password
+    <input type="password" name="confirm" autocomplete="new-password" required>
+  </label>
+  <button type="submit">Change password</button>
+</form>
+<p class="muted small">Changing the password signs out every other session.</p>
+
+<h2>Import from changedetection.io</h2>
+<form method="post" action="/settings/import" enctype="multipart/form-data" class="stack wide">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>url-watches.json
+    <input type="file" name="file" accept=".json,application/json" required>
+  </label>
+  <button type="submit">Import</button>
+</form>
+{% endblock %}

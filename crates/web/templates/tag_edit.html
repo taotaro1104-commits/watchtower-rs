@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Edit tag - watchtower{% endblock %}
+{% block nav %}<a href="/tags">Tags</a>{% endblock %}
+{% block content %}
+<h1>Edit tag</h1>
+<form method="post" action="/tags/{{ id }}/edit" class="stack wide">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>Name
+    <input type="text" name="title" value="{{ title }}" required maxlength="100">
+  </label>
+
+  {% include "config_fields.html" %}
+
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

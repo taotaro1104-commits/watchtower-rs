@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Import - watchtower{% endblock %}
+{% block nav %}<a href="/">All watches</a>{% endblock %}
+{% block content %}
+<h1>Import finished</h1>
+<p>Imported {{ imported }} watch(es), skipped {{ skipped.len() }}.</p>
+{% if !skipped.is_empty() %}
+<h2>Skipped</h2>
+<ul>{% for s in skipped %}<li class="small">{{ s }}</li>{% endfor %}</ul>
+{% endif %}
+{% if !warnings.is_empty() %}
+<h2>Notes</h2>
+<ul>{% for w in warnings %}<li class="small">{{ w }}</li>{% endfor %}</ul>
+{% endif %}
+<p><a href="/">Back to the list</a></p>
+{% endblock %}

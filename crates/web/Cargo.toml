@@ -1,0 +1,39 @@
+[package]
+name = "watchtower-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+argon2 = "0.6.0"
+askama = "0.16.1"
+axum = { version = "0.8.9", features = ["multipart"] }
+axum-extra = { version = "0.12.6", features = ["cookie", "form"] }
+futures-util = "0.3.34"
+rand = "0.10.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+time = { version = "0.3.55", features = ["formatting"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-util = "0.7.20"
+tower-http = "0.7.1"
+tracing = "0.1.44"
+url = "2.5.8"
+uuid = "1.29.0"
+watchtower-core = { version = "0.1.0", path = "../core" }
+watchtower-notify = { version = "0.1.0", path = "../notify" }
+watchtower-process = { version = "0.1.0", path = "../process" }
+watchtower-scheduler = { version = "0.1.0", path = "../scheduler" }
+watchtower-store = { version = "0.1.0", path = "../store" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+http = "1.5.0"
+http-body-util = "0.1.5"
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }
+tower = "0.5.3"
+uuid = "1.29.0"

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Watch - watchtower{% endblock %}
+{% block nav %}<a href="/">All watches</a>{% endblock %}
+{% block content %}
+<h1>{% if row.title.is_empty() %}{{ row.url }}{% else %}{{ row.title }}{% endif %}</h1>
+<p class="muted">{{ row.url }}</p>
+<dl>
+  <dt>Last checked</dt><dd>{{ row.last_checked }}</dd>
+  <dt>Last changed</dt><dd>{{ row.last_changed }}</dd>
+  <dt>Snapshots</dt><dd>{{ snapshots }}</dd>
+</dl>
+{% if let Some(e) = row.error %}<p class="error" role="alert">{{ e }}</p>{% endif %}
+<h2>Latest change</h2>
+{% if diff.is_empty() %}
+<p class="muted">{% if snapshots < 2 %}Only the baseline snapshot exists so far.{% else %}No differences between the last two snapshots.{% endif %}</p>
+{% else %}
+<pre class="diff">{% for l in diff %}<span class="{% if l.added %}add{% else %}del{% endif %}">{% if l.added %}+ {% else %}- {% endif %}{{ l.text }}</span>{% endfor %}</pre>
+{% endif %}
+<h2>Recent events</h2>
+{% if events.is_empty() %}
+<p class="muted">No events yet.</p>
+{% else %}
+<ul class="events">
+{% for e in events %}
+  <li><span class="small muted">{{ e.at }}</span> {{ e.kind }}{% if !e.detail.is_empty() %} <span class="small">{{ e.detail }}</span>{% endif %}</li>
+{% endfor %}
+</ul>
+{% endif %}
+<p><a href="/watches/{{ row.id }}/edit">Edit settings</a></p>
+<form method="post" action="/watches/{{ row.id }}/delete">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button type="submit" class="danger">Delete this watch</button>
+</form>
+{% endblock %}
+{% block scripts %}<script src="/static/app.js" defer></script>{% endblock %}
