@@ -41,6 +41,7 @@ impl Fetcher for FakeFetcher {
             headers: http::HeaderMap::new(),
             content_type: Some("text/plain".into()),
             body,
+            raw: None,
             screenshot: None,
             final_url: req.url.clone(),
         })

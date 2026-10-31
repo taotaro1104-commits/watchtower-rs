@@ -6,6 +6,19 @@
     <input type="text" inputmode="decimal" name="price_below" value="{{ price_below }}" placeholder="e.g. 19.99" maxlength="20" autocomplete="off">
   </label>
 
+  <label>Fetch method
+    <select name="fetch_backend">
+      <option value="system"{% if fetch_backend == "system" %} selected{% endif %}>Default (inherit)</option>
+      <option value="html_requests"{% if fetch_backend == "html_requests" %} selected{% endif %}>Plain HTTP</option>
+      <option value="html_webdriver"{% if fetch_backend == "html_webdriver" %} selected{% endif %}>Browser (renders JavaScript)</option>
+    </select>
+  </label>
+
+  <label><span class="lbl">Browser steps (Browser method only) &mdash; one per line:
+    <code>click SELECTOR</code>, <code>type SELECTOR = TEXT</code>, <code>wait_for SELECTOR [@ms]</code>, <code>wait ms</code></span>
+    <textarea name="browser_steps" rows="4" autocomplete="off" spellcheck="false">{{ browser_steps }}</textarea>
+  </label>
+
   <h2>Filters</h2>
   <label><span class="lbl">Include (CSS selector, or <code>json:$.path</code>) &mdash; one per line</span>
     <textarea name="include_filters" rows="3">{{ include_filters }}</textarea>

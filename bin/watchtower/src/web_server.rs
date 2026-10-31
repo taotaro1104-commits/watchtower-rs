@@ -12,7 +12,10 @@ use watchtower_scheduler::Command;
 use watchtower_store::Store;
 use watchtower_web::{router, AppState, WebConfig};
 
+use watchtower_fetch::SsrfPolicy;
+
 use crate::config::AppConfig;
+use crate::picker::CdpPicker;
 
 fn web_config(cfg: &AppConfig) -> WebConfig {
     WebConfig {
@@ -54,7 +57,12 @@ pub async fn spawn(
         .with_context(|| format!("binding {}", cfg.listen))?;
     tracing::info!(addr = %cfg.listen, "web UI listening");
     let (store_for_api, scheduler_for_api) = (store.clone(), scheduler.clone());
-    let state = AppState::with_scheduler(store, web_config(cfg), Some(scheduler));
+    let mut state = AppState::with_scheduler(store, web_config(cfg), Some(scheduler));
+    // ブラウザの設定があるときだけ、ビジュアルセレクタを使えるようにする (main で検証済み)
+    if let Ok(Some(ws)) = cfg.browser_url() {
+        let policy = SsrfPolicy::with_allowed_ips(cfg.allowed_ips.clone());
+        state = state.with_picker(Arc::new(CdpPicker::new(ws, policy)));
+    }
     let api = watchtower_api::router(ApiState::with_metrics(
         store_for_api,
         Some(scheduler_for_api),

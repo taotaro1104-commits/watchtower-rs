@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Use this element - watchtower{% endblock %}
+{% block nav %}<a href="/watches/{{ id }}/pick">Back to the page</a>{% endblock %}
+{% block content %}
+<h1>Use this element</h1>
+<p><code>{{ selector }}</code></p>
+<form method="post" action="/watches/{{ id }}/pick/choose" class="stack wide">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="selector" value="{{ selector }}">
+  <label class="check"><input type="radio" name="mode" value="include" checked> Watch only this element (include)</label>
+  <label class="check"><input type="radio" name="mode" value="exclude"> Ignore this element (exclude)</label>
+  <button type="submit">Add to filters</button>
+</form>
+{% endblock %}

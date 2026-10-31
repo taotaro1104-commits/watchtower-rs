@@ -1,0 +1,44 @@
+# watchtower-rs の例。
+#
+# 初回だけ、パスワードと API キーを作る (標準入力から読むので -i が必要):
+#   docker compose run --rm -i watchtower set-password
+#   docker compose run --rm watchtower api-key
+# そのあと:
+#   docker compose up -d
+#
+# 注意: 管理画面はパスワードだけで守られている。インターネットに出すときは、
+# リバースプロキシで HTTPS にし (WATCHTOWER_BASE_URL を https:// にすると Cookie に Secure が付く)、
+# ポートを外へ直接公開しないこと。
+services:
+  watchtower:
+    build: .
+    image: watchtower-rs:latest
+    restart: unless-stopped
+    ports:
+      # 手元のマシンからだけ開ける。プロキシ経由にするなら、この行を消して同じネットワークに置く。
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - watchtower-data:/data
+    environment:
+      WATCHTOWER_BASE_URL: "http://localhost:5000"
+      # SSRF 対策の例外: 取得してよいプライベートアドレスを列挙する (既定は空 = すべて拒否)
+      # WATCHTOWER_ALLOWED_IPS: '["192.168.1.10"]'
+      # 未実装のサービスの通知を転送する Apprise API (下の apprise サービスを使うとき)
+      # WATCHTOWER_APPRISE_API_URL: "http://apprise:8000"
+      # WATCHTOWER_ALLOWED_IPS に apprise の IP も入れる必要がある (プライベート宛てのため)
+    # コンテナを必要最小限の権限で動かす
+    read_only: true
+    tmpfs:
+      - /tmp # バックアップの一時ファイル用
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  # apprise:
+  #   image: caronc/apprise:latest
+  #   restart: unless-stopped
+  #   # ポートは公開せず、watchtower からだけ届くようにする
+
+volumes:
+  watchtower-data:

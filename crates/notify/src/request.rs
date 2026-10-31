@@ -16,6 +16,9 @@ const DISCORD_LIMIT: usize = 2000;
 const SLACK_LIMIT: usize = 4000;
 const TELEGRAM_LIMIT: usize = 4096;
 const NTFY_LIMIT: usize = 4096;
+const MATTERMOST_LIMIT: usize = 16383;
+const PUSHOVER_TITLE_LIMIT: usize = 250;
+const PUSHOVER_MESSAGE_LIMIT: usize = 1024;
 
 impl NotifyTarget {
     pub fn build_request(&self, msg: &Message) -> Result<FetchRequest, NotifyError> {
@@ -73,6 +76,28 @@ impl NotifyTarget {
                     "message": truncate(&msg.body, NTFY_LIMIT),
                 }),
             ),
+            Kind::Mattermost { endpoint, token } => (
+                endpoint
+                    .join(&format!("hooks/{token}"))
+                    .map_err(|_| NotifyError::InvalidUrl("malformed URL"))?,
+                vec![],
+                json!({
+                    "text": truncate(
+                        &defang_mentions(&format!("**{}**\n{}", msg.title, msg.body)),
+                        MATTERMOST_LIMIT,
+                    ),
+                }),
+            ),
+            Kind::Pushover { user, token } => (
+                fixed("https://api.pushover.net/1/messages.json")?,
+                vec![],
+                json!({
+                    "token": token,
+                    "user": user,
+                    "title": truncate(&msg.title, PUSHOVER_TITLE_LIMIT),
+                    "message": truncate(&msg.body, PUSHOVER_MESSAGE_LIMIT),
+                }),
+            ),
             Kind::Gotify { endpoint, token } => (
                 endpoint
                     .join("message")
@@ -90,6 +115,11 @@ fn slack_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+}
+
+/// Mattermost はページ由来の `@channel` などで全員を呼べてしまうので、`@` の直後に ZWSP を挟む。
+fn defang_mentions(s: &str) -> String {
+    s.replace('@', "@\u{200b}")
 }
 
 fn fixed(url: &str) -> Result<Url, NotifyError> {

@@ -1,4 +1,5 @@
 use crate::config::ConfigLayer;
+use crate::steps::BrowserStep;
 
 pub const DEFAULT_INTERVAL_SECS: u64 = 300;
 /// これより短い間隔は対象サイトと DB への負荷が大きいので許さない。
@@ -21,6 +22,8 @@ pub struct EffectiveConfig {
     pub notify_urls: Vec<String>,
     pub notify_muted: bool,
     pub price_below: Option<f64>,
+    pub use_browser: bool,
+    pub browser_steps: Vec<BrowserStep>,
 }
 
 impl EffectiveConfig {
@@ -58,6 +61,13 @@ impl EffectiveConfig {
             trigger_text: merge(|l| &l.trigger_text),
             notify_urls: merge(|l| &l.notify_urls),
             notify_muted: layers.iter().find_map(|l| l.notify_muted).unwrap_or(false),
+            use_browser: layers.iter().find_map(|l| l.use_browser).unwrap_or(false),
+            browser_steps: layers
+                .iter()
+                .map(|l| &l.browser_steps)
+                .find(|s| !s.is_empty())
+                .cloned()
+                .unwrap_or_default(),
             // 不正な値 (NaN・無限大・負) は無視して、下の層の指定に任せる
             price_below: layers
                 .iter()

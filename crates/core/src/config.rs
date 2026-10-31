@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::steps::BrowserStep;
+
 /// Watch / Tag / Global の各層が持つ設定。未指定は `None` / 空。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -15,4 +17,28 @@ pub struct ConfigLayer {
     pub notify_muted: Option<bool>,
     /// この価格以下になったら通知する (商品ページの構造化データから読む)。
     pub price_below: Option<f64>,
+    /// 取得にブラウザ (JavaScript の描画) を使う。未指定は通常の HTTP。
+    pub use_browser: Option<bool>,
+    /// ブラウザ取得でページを読み込んだ後に行う操作。最も近い層の指定がそのまま使われる (連結しない)。
+    pub browser_steps: Vec<BrowserStep>,
+}
+
+/// 取得方法の名前 (本家 changedetection.io の `fetch_backend` と同じ)。
+/// `None` は「継承する (system)」、`Some(false)` は通常の HTTP、`Some(true)` はブラウザ。
+pub fn fetch_backend_name(use_browser: Option<bool>) -> &'static str {
+    match use_browser {
+        None => "system",
+        Some(false) => "html_requests",
+        Some(true) => "html_webdriver",
+    }
+}
+
+/// `fetch_backend_name` の逆。空は「継承」。未知の名前は `None` (= 不正)。
+pub fn parse_fetch_backend(name: &str) -> Option<Option<bool>> {
+    match name.trim() {
+        "" | "system" => Some(None),
+        "html_requests" => Some(Some(false)),
+        "html_webdriver" => Some(Some(true)),
+        _ => None,
+    }
 }

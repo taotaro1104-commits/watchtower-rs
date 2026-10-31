@@ -7,7 +7,9 @@ mod guard;
 mod jq;
 mod kind;
 mod normalize;
+mod pdf;
 pub mod product;
+mod sandbox;
 mod xpath;
 
 pub use diff::{diff, DiffResult};
@@ -44,13 +46,23 @@ pub fn process(
         ContentKind::Json => extract::json_to_text(body, cfg)?,
         ContentKind::Text => body.to_string(),
     };
-    let text = normalize::normalize(&raw, &cfg.ignore_text);
+    Ok(finish(&raw, cfg, kind == ContentKind::Html, body))
+}
+
+/// PDF (生のバイト列) を、文字列と同じパイプライン (正規化・判定・ハッシュ) に通す。
+pub fn process_pdf(raw: &[u8], cfg: &EffectiveConfig) -> Result<Processed, ProcessError> {
+    let text = pdf::extract_text(raw)?;
+    Ok(finish(&text, cfg, false, ""))
+}
+
+fn finish(raw: &str, cfg: &EffectiveConfig, html: bool, body: &str) -> Processed {
+    let text = normalize::normalize(raw, &cfg.ignore_text);
     let triggered = normalize::is_triggered(&text, &cfg.trigger_text)
-        || (kind == ContentKind::Html && price_is_below(body, cfg.price_below));
+        || (html && price_is_below(body, cfg.price_below));
     let hash = *blake3::hash(text.as_bytes()).as_bytes();
-    Ok(Processed {
+    Processed {
         text,
         hash,
         triggered,
-    })
+    }
 }

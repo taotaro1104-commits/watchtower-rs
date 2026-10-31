@@ -12,6 +12,8 @@ use axum_extra::extract::Form;
 use serde::Deserialize;
 use url::Url;
 use uuid::Uuid;
+use watchtower_core::config::{fetch_backend_name, parse_fetch_backend};
+use watchtower_core::steps::{parse_steps_text, steps_to_text};
 use watchtower_core::ConfigLayer;
 use watchtower_notify::NotifyTarget;
 use watchtower_scheduler::Command;
@@ -48,11 +50,15 @@ struct EditPage {
     interval: String,
     notify_muted: bool,
     price_below: String,
+    fetch_backend: &'static str,
+    browser_steps: String,
     include_filters: String,
     exclude_filters: String,
     ignore_text: String,
     trigger_text: String,
     notify_urls: String,
+    /// ブラウザがあって、ビジュアルセレクタを使えるか。
+    can_pick: bool,
 }
 
 /// 設定項目のテキストエリア表示 (ウォッチとタグで共通)。
@@ -60,6 +66,8 @@ pub(crate) struct ConfigText {
     pub interval: String,
     pub notify_muted: bool,
     pub price_below: String,
+    pub fetch_backend: &'static str,
+    pub browser_steps: String,
     pub include_filters: String,
     pub exclude_filters: String,
     pub ignore_text: String,
@@ -75,6 +83,8 @@ pub(crate) fn config_text(c: &ConfigLayer) -> ConfigText {
             .unwrap_or_default(),
         notify_muted: c.notify_muted == Some(true),
         price_below: c.price_below.map(|p| p.to_string()).unwrap_or_default(),
+        fetch_backend: fetch_backend_name(c.use_browser),
+        browser_steps: steps_to_text(&c.browser_steps),
         include_filters: c.include_filters.join("\n"),
         exclude_filters: c.exclude_filters.join("\n"),
         ignore_text: c.ignore_text.join("\n"),
@@ -121,11 +131,14 @@ pub async fn edit_page(
             interval: c.interval,
             notify_muted: c.notify_muted,
             price_below: c.price_below,
+            fetch_backend: c.fetch_backend,
+            browser_steps: c.browser_steps,
             include_filters: c.include_filters,
             exclude_filters: c.exclude_filters,
             ignore_text: c.ignore_text,
             trigger_text: c.trigger_text,
             notify_urls: c.notify_urls,
+            can_pick: state.0.picker.is_some(),
         },
     )
 }
@@ -135,6 +148,8 @@ pub(crate) struct ConfigInput<'a> {
     pub interval: &'a str,
     pub notify_muted: bool,
     pub price_below: &'a str,
+    pub fetch_backend: &'a str,
+    pub browser_steps: &'a str,
     pub include_filters: &'a str,
     pub exclude_filters: &'a str,
     pub ignore_text: &'a str,
@@ -183,6 +198,16 @@ pub(crate) fn apply_config(c: &mut ConfigLayer, input: &ConfigInput) -> Result<(
     next.check_interval_secs = parse_interval(input.interval)?;
     next.notify_muted = input.notify_muted.then_some(true);
     next.price_below = parse_price_below(input.price_below)?;
+    next.use_browser = parse_fetch_backend(input.fetch_backend)
+        .ok_or_else(|| bad_request("Unknown fetch method."))?;
+    next.browser_steps = parse_steps_text(input.browser_steps)
+        .map_err(|e| bad_request(&format!("Browser steps: {e}")))?;
+    // 通常の HTTP を明示した層にステップがあっても動かない。黙って無視せず断る
+    if !next.browser_steps.is_empty() && next.use_browser == Some(false) {
+        return Err(bad_request(
+            "Browser steps need the \"Browser\" fetch method (or an inherited one).",
+        ));
+    }
     next.include_filters = lines(input.include_filters, "Include filters")?;
     next.exclude_filters = lines(input.exclude_filters, "Exclude filters")?;
     next.ignore_text = lines(input.ignore_text, "Ignore text")?;
@@ -213,6 +238,10 @@ pub struct EditForm {
     notify_muted: Option<String>,
     #[serde(default)]
     price_below: String,
+    #[serde(default)]
+    fetch_backend: String,
+    #[serde(default)]
+    browser_steps: String,
     #[serde(default)]
     include_filters: String,
     #[serde(default)]
@@ -301,6 +330,8 @@ fn apply(
             interval: &form.interval,
             notify_muted: form.notify_muted.is_some(),
             price_below: &form.price_below,
+            fetch_backend: &form.fetch_backend,
+            browser_steps: &form.browser_steps,
             include_filters: &form.include_filters,
             exclude_filters: &form.exclude_filters,
             ignore_text: &form.ignore_text,

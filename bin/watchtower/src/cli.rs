@@ -34,6 +34,8 @@ pub enum Command {
     ApiKey,
     /// RSS フィードのトークンを新しく発行する (以前のものは無効になる)
     RssToken,
+    /// 自分自身の /healthz に問い合わせる (コンテナの HEALTHCHECK 用。正常なら終了コード 0)
+    Healthcheck,
     /// DB とスナップショットを 1 つの zip に書き出す (稼働中でも可。既存のファイルは上書きしない)
     Backup { file: PathBuf },
     /// `backup` で作った zip から復元する (既存のデータがあるときは --force が必要)
@@ -75,6 +77,9 @@ pub struct AddArgs {
     /// 通知先 (Apprise 形式 URL。例: discord://id/token)。複数指定可
     #[arg(long)]
     pub notify: Vec<String>,
+    /// 取得にブラウザ (JavaScript の描画) を使う。`browser_ws_url` の設定が要る
+    #[arg(long)]
+    pub browser: bool,
 }
 
 #[derive(Debug, Args)]

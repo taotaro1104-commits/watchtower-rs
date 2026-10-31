@@ -1,0 +1,11 @@
+# ビルドに要らないもの (特に target は数十 GB になる)
+target/
+.git/
+.github/
+data/
+*.pdf
+*.zip
+*.db
+*.db-wal
+*.db-shm
+watchtower.toml

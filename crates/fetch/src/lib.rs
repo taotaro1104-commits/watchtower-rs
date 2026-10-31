@@ -1,10 +1,13 @@
 //! 取得層。`Fetcher` trait と HTTP 直取得の実装。
 
+mod cdp;
 mod charset;
 mod error;
 mod http_fetcher;
 mod ssrf;
+mod step_script;
 
+pub use cdp::CdpFetcher;
 pub use error::FetchError;
 pub use http_fetcher::HttpFetcher;
 pub use ssrf::SsrfPolicy;
@@ -32,6 +35,8 @@ pub struct FetchRequest {
     pub max_body_bytes: usize,
     /// 空なら 2xx のみ成功扱い。
     pub accepted_statuses: Vec<u16>,
+    /// ブラウザ取得でだけ使う。ページを読み込んだ後に順に行う操作 (通常の HTTP 取得は無視する)。
+    pub browser_steps: Vec<watchtower_core::BrowserStep>,
 }
 
 impl FetchRequest {
@@ -45,6 +50,7 @@ impl FetchRequest {
             timeout: DEFAULT_TIMEOUT,
             max_body_bytes: DEFAULT_MAX_BODY_BYTES,
             accepted_statuses: Vec::new(),
+            browser_steps: Vec::new(),
         }
     }
 }
@@ -56,6 +62,8 @@ pub struct FetchResponse {
     pub content_type: Option<String>,
     /// charset 判定後に UTF-8 化した本文。
     pub body: String,
+    /// PDF などのバイナリは、文字コード変換を通さずそのまま持つ (このとき `body` は空)。
+    pub raw: Option<Bytes>,
     /// ブラウザ取得のみ。
     pub screenshot: Option<Bytes>,
     pub final_url: Url,

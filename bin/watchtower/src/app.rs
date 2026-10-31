@@ -8,7 +8,7 @@ use url::Url;
 use uuid::Uuid;
 use watchtower_core::effective::MIN_INTERVAL_SECS;
 use watchtower_core::{ConfigLayer, Watch};
-use watchtower_fetch::{HttpFetcher, SsrfPolicy};
+use watchtower_fetch::{CdpFetcher, HttpFetcher, SsrfPolicy};
 use watchtower_metrics::Metrics;
 use watchtower_scheduler::{
     CheckOutcome, CheckRunner, CheckerConfig, Scheduler, SchedulerConfig, StoreCheckRunner,
@@ -59,9 +59,8 @@ impl App {
     }
 
     fn runner(&self, outcomes: Option<mpsc::Sender<CheckOutcome>>) -> StoreCheckRunner {
-        let fetcher = Arc::new(HttpFetcher::new(SsrfPolicy::with_allowed_ips(
-            self.cfg.allowed_ips.clone(),
-        )));
+        let policy = SsrfPolicy::with_allowed_ips(self.cfg.allowed_ips.clone());
+        let fetcher = Arc::new(HttpFetcher::new(policy.clone()));
         let cfg = CheckerConfig {
             global: ConfigLayer {
                 check_interval_secs: Some(self.cfg.default_interval_secs),
@@ -71,7 +70,12 @@ impl App {
             metrics: Arc::clone(&self.metrics),
             ..Default::default()
         };
-        StoreCheckRunner::new(self.store.clone(), fetcher, cfg, outcomes)
+        let runner = StoreCheckRunner::new(self.store.clone(), fetcher, cfg, outcomes);
+        // main で検証済み。ブラウザの設定があるときだけ、`use_browser` のウォッチに使う
+        match self.cfg.browser_url() {
+            Ok(Some(ws)) => runner.with_browser(Arc::new(CdpFetcher::new(ws, policy))),
+            _ => runner,
+        }
     }
 
     pub async fn add(&self, a: AddArgs) -> Result<()> {
@@ -91,6 +95,9 @@ impl App {
         w.config.ignore_text = a.ignore;
         w.config.trigger_text = a.trigger;
         w.config.notify_urls = a.notify;
+        if a.browser {
+            w.config.use_browser = Some(true);
+        }
         self.store.add_watch(&w).await?;
         println!("added {}", w.id);
         Ok(())

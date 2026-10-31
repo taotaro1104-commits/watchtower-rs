@@ -35,6 +35,14 @@ pub(crate) enum Kind {
         endpoint: Url,
         token: String,
     },
+    Mattermost {
+        endpoint: Url,
+        token: String,
+    },
+    Pushover {
+        user: String,
+        token: String,
+    },
     Mail(MailTarget),
     /// 未実装のサービス。Apprise API サーバへそのまま転送する。
     Foreign {
@@ -74,6 +82,14 @@ impl NotifyTarget {
                 let [bot_token, chat_id] = segments::<2>(rest)?;
                 Kind::Telegram { bot_token, chat_id }
             }
+            "mmost" | "mmosts" => {
+                let (host, token) = host_and_one(rest)?;
+                Kind::Mattermost {
+                    endpoint: http_url(http_scheme(scheme == "mmosts"), &format!("{host}/"))?,
+                    token,
+                }
+            }
+            "pover" => pushover(rest)?,
             "mailto" | "mailtos" => Kind::Mail(MailTarget::parse(rest, scheme == "mailtos")?),
             "ntfy" | "ntfys" => ntfy(rest, scheme == "ntfys")?,
             "gotify" | "gotifys" => {
@@ -97,6 +113,8 @@ impl NotifyTarget {
             Kind::Telegram { .. } => "tgram",
             Kind::Ntfy { .. } => "ntfy",
             Kind::Gotify { .. } => "gotify",
+            Kind::Mattermost { .. } => "mmost",
+            Kind::Pushover { .. } => "pover",
             Kind::Mail(_) => "mailto",
             Kind::Foreign { .. } => "foreign",
         }
@@ -165,6 +183,24 @@ fn ntfy(rest: &str, tls: bool) -> Result<Kind, NotifyError> {
     })
 }
 
+/// `user@token` (どちらも英数字のみ)。
+fn pushover(rest: &str) -> Result<Kind, NotifyError> {
+    let alnum = |s: &str| {
+        if !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric()) {
+            Ok(s.to_string())
+        } else {
+            Err(NotifyError::InvalidUrl("invalid token characters"))
+        }
+    };
+    let (user, token) = rest
+        .split_once('@')
+        .ok_or(NotifyError::InvalidUrl("missing token"))?;
+    Ok(Kind::Pushover {
+        user: alnum(user)?,
+        token: alnum(token)?,
+    })
+}
+
 /// `host[:port]/token` を分ける。
 fn host_and_one(rest: &str) -> Result<(String, String), NotifyError> {
     let (host, tok) = rest
@@ -218,7 +254,9 @@ impl fmt::Display for NotifyTarget {
                 let tls = if url.scheme() == "https" { "s" } else { "" };
                 write!(f, "json{tls}://{}", url.host_str().unwrap_or_default())
             }
-            Kind::Ntfy { endpoint, .. } | Kind::Gotify { endpoint, .. } => write!(
+            Kind::Ntfy { endpoint, .. }
+            | Kind::Gotify { endpoint, .. }
+            | Kind::Mattermost { endpoint, .. } => write!(
                 f,
                 "{}://{}",
                 self.scheme(),

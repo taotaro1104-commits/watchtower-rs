@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 argon2 = "0.6.0"
+async-trait = "0.1.92"
+base64 = "0.23.1"
 askama = "0.16.1"
 axum = { version = "0.8.9", features = ["multipart"] }
 axum-extra = { version = "0.12.6", features = ["cookie", "form"] }

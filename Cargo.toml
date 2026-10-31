@@ -9,3 +9,9 @@ license = "Apache-2.0"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+[profile.release]
+# 配布するバイナリを小さくする
+strip = true
+# panic は unwind のまま。PDF の解析や jq の評価を catch_unwind で守っているので、abort にはしない。
+panic = "unwind"

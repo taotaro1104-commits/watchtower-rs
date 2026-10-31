@@ -30,6 +30,9 @@ pub struct AppConfig {
     pub secure_cookies: bool,
     /// 未実装のサービスの通知を転送する Apprise API サーバ (例: `http://apprise:8000`)。
     pub apprise_api_url: Option<String>,
+    /// JavaScript の描画に使う Chrome の DevTools の WebSocket (例: `ws://chrome:9222/devtools/browser/<id>`)。
+    /// 値にトークンを含み得るので、ログやエラーには出さない。
+    pub browser_ws_url: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -47,6 +50,7 @@ impl Default for AppConfig {
             listen: SocketAddr::from(([127, 0, 0, 1], 5000)),
             secure_cookies: false,
             apprise_api_url: None,
+            browser_ws_url: None,
         }
     }
 }
@@ -58,6 +62,26 @@ impl AppConfig {
             .merge(Env::prefixed(ENV_PREFIX).ignore(&["config"]))
             .extract()
             .map_err(Box::new)
+    }
+
+    /// ブラウザの接続先。ws(s):// で、ユーザー情報を含まないものだけ受け付ける (値はエラーに載せない)。
+    pub fn browser_url(&self) -> anyhow::Result<Option<String>> {
+        let Some(raw) = self
+            .browser_ws_url
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+        else {
+            return Ok(None);
+        };
+        let url = url::Url::parse(raw.trim())
+            .map_err(|_| anyhow::anyhow!("browser_ws_url is not a valid URL"))?;
+        if !matches!(url.scheme(), "ws" | "wss") || url.host_str().is_none() {
+            anyhow::bail!("browser_ws_url must be a ws:// or wss:// URL");
+        }
+        if !url.username().is_empty() || url.password().is_some() {
+            anyhow::bail!("browser_ws_url must not contain credentials");
+        }
+        Ok(Some(url.to_string()))
     }
 
     /// 転送先の Apprise API の URL。http(s) で、ユーザー情報を含まないものだけ受け付ける。

@@ -21,6 +21,8 @@
   {% endfor %}
   {% endif %}
 
+  {% if can_pick %}<p><a href="/watches/{{ id }}/pick">Pick an element visually</a> <span class="muted small">(renders the page in the browser; saves nothing until you choose)</span></p>{% endif %}
+
   {% include "config_fields.html" %}
 
   <button type="submit">Save</button>

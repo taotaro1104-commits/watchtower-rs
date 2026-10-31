@@ -9,7 +9,7 @@ use url::Url;
 use watchtower_core::{ConfigLayer, EffectiveConfig, Watch, WatchId, WatchState};
 use watchtower_fetch::{FetchError, FetchRequest, Fetcher};
 use watchtower_metrics::Metrics;
-use watchtower_process::{diff, process, DiffResult};
+use watchtower_process::{diff, process, process_pdf, DiffResult};
 use watchtower_store::Store;
 
 use crate::backoff::{error_delay, random_jitter, success_delay};
@@ -68,6 +68,8 @@ struct Checked {
 pub struct StoreCheckRunner {
     store: Store,
     fetcher: Arc<dyn Fetcher>,
+    /// `use_browser` のウォッチ用 (ブラウザの設定があるときだけ)。
+    browser: Option<Arc<dyn Fetcher>>,
     cfg: CheckerConfig,
     outcomes: Option<mpsc::Sender<CheckOutcome>>,
 }
@@ -82,9 +84,16 @@ impl StoreCheckRunner {
         Self {
             store,
             fetcher,
+            browser: None,
             cfg,
             outcomes,
         }
+    }
+
+    /// JavaScript の描画が要るウォッチ (`use_browser`) の取得に使う取得器を設定する。
+    pub fn with_browser(mut self, browser: Arc<dyn Fetcher>) -> Self {
+        self.browser = Some(browser);
+        self
     }
 
     async fn effective(&self, w: &Watch) -> EffectiveConfig {
@@ -105,15 +114,31 @@ impl StoreCheckRunner {
         let mut req = FetchRequest::get(w.url.clone());
         req.timeout = Duration::from_secs(cfg.timeout_secs);
         req.max_body_bytes = cfg.max_body_bytes;
+        if !cfg.browser_steps.is_empty() && !cfg.use_browser {
+            return Err("browser steps need the browser fetch method (html_webdriver)".to_string());
+        }
+        req.browser_steps = cfg.browser_steps.clone();
         let fetch_started = Instant::now();
-        let fetched = self.fetcher.fetch(&req, cancel).await;
+        let fetcher = if cfg.use_browser {
+            self.browser.as_ref().ok_or_else(|| {
+                "this watch needs a browser, but no browser is configured (set browser_ws_url)"
+                    .to_string()
+            })?
+        } else {
+            &self.fetcher
+        };
+        let fetched = fetcher.fetch(&req, cancel).await;
         if !matches!(fetched, Err(FetchError::Cancelled)) {
             self.cfg.metrics.observe_fetch(fetch_started.elapsed());
         }
         let resp = fetched.map_err(|e| e.to_string())?;
 
-        let processed =
-            process(&resp.body, resp.content_type.as_deref(), cfg).map_err(|e| e.to_string())?;
+        // PDF などのバイナリは生のバイト列から、それ以外は文字列から
+        let processed = match &resp.raw {
+            Some(raw) => process_pdf(raw, cfg),
+            None => process(&resp.body, resp.content_type.as_deref(), cfg),
+        }
+        .map_err(|e| e.to_string())?;
         let previous = self.previous_text(w.id).await?;
         let saved = self
             .store

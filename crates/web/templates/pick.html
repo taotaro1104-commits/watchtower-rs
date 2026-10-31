@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Pick an element - watchtower{% endblock %}
+{% block nav %}<a href="/watches/{{ id }}/edit">Back to settings</a>{% endblock %}
+{% block content %}
+<h1>Pick an element</h1>
+<p class="muted">{{ title }}</p>
+<p class="small">Click the part of the page you want to watch (or ignore). The smallest box under the pointer is chosen.</p>
+<svg class="pick" viewBox="0 0 {{ width }} {{ height }}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Rendered page">
+<image href="data:image/png;base64,{{ image }}" x="0" y="0" width="{{ width }}" height="{{ height }}"/>
+{% for b in boxes %}<a href="/watches/{{ id }}/pick/choose?selector={{ b.query }}"><rect class="pk" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.width }}" height="{{ b.height }}"><title>{{ b.label }}</title></rect></a>
+{% endfor %}</svg>
+{% endblock %}

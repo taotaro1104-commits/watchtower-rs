@@ -51,3 +51,7 @@ code { font-family: ui-monospace, Consolas, monospace; }
 ul.events { list-style: none; padding: 0; margin: 0 0 16px; }
 ul.events li { padding: 4px 0; border-bottom: 1px solid var(--line); }
 nav.nav { display: flex; align-items: center; gap: 16px; }
+
+svg.pick { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+svg.pick rect.pk { fill: transparent; stroke: none; cursor: pointer; }
+svg.pick a:hover rect.pk, svg.pick a:focus rect.pk { fill: rgba(30, 120, 255, .18); stroke: #1e78ff; stroke-width: 2; }

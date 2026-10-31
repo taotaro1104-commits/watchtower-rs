@@ -4,6 +4,7 @@ mod auth;
 mod edit;
 mod events;
 mod handlers;
+mod pick;
 mod settings;
 mod sse;
 mod tags;
@@ -24,6 +25,7 @@ use watchtower_scheduler::Command;
 use watchtower_store::Store;
 
 use crate::auth::{LoginLimiter, Sessions};
+pub use crate::pick::PagePicker;
 
 const PASSWORD_SETTING: &str = "web_password_hash";
 /// フォームの本文サイズ上限。
@@ -81,6 +83,10 @@ struct Inner {
     /// 終了要求。開いたままの SSE 接続を閉じさせるために使う。
     shutdown: CancellationToken,
     scheduler: Option<mpsc::Sender<Command>>,
+    /// ビジュアルセレクタ用 (ブラウザがあるときだけ)。
+    picker: Option<Arc<dyn PagePicker>>,
+    /// 描画は同時に 1 件だけ。
+    pick_slot: Semaphore,
 }
 
 #[derive(Clone)]
@@ -109,7 +115,18 @@ impl AppState {
             backup_slot: Semaphore::new(1),
             shutdown: CancellationToken::new(),
             scheduler,
+            picker: None,
+            pick_slot: Semaphore::new(1),
         }))
+    }
+
+    /// ビジュアルセレクタを有効にする。状態を複製する前 (組み立て中) に呼ぶこと。
+    #[must_use]
+    pub fn with_picker(mut self, picker: Arc<dyn PagePicker>) -> Self {
+        Arc::get_mut(&mut self.0)
+            .expect("with_picker must be called before the state is cloned")
+            .picker = Some(picker);
+        self
     }
 
     /// ログインパスワードを設定 (または変更) する。ハッシュだけを保存する。
@@ -172,6 +189,11 @@ pub fn router(state: AppState) -> Router {
         .route("/watches/{id}", get(handlers::watch_page))
         .route("/watches/{id}/edit", get(edit::edit_page).post(edit::save))
         .route("/watches/{id}/delete", post(handlers::delete_watch))
+        .route("/watches/{id}/pick", get(pick::page))
+        .route(
+            "/watches/{id}/pick/choose",
+            get(pick::choose_page).post(pick::choose),
+        )
         .route("/settings", get(settings::page))
         .route("/settings/notify", post(settings::save_notify))
         .route("/settings/password", post(settings::change_password))

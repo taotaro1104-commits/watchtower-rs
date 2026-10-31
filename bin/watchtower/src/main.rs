@@ -1,7 +1,9 @@
 mod app;
 mod cli;
 mod config;
+mod healthcheck;
 mod notifications;
+mod picker;
 mod web_server;
 
 use anyhow::{Context, Result};
@@ -31,6 +33,11 @@ async fn main() -> Result<()> {
     init_logging(cfg.log_json);
     // 転送先があるときだけ、未知のスキームを保存時に受け付ける (CLI の検証にも効く)
     watchtower_notify::allow_foreign_targets(cfg.apprise_url()?.is_some());
+    cfg.browser_url()?; // 不正な設定は起動時に弾く
+                        // ヘルスチェックは DB を開かずに、待ち受けアドレスだけを使う
+    if matches!(cli.command, Command::Healthcheck) {
+        return healthcheck::check(cfg.listen).await;
+    }
     // 復元は DB を開く前に行う (開くと空の DB が作られてしまう)
     if let Command::Restore { file, force } = &cli.command {
         return app::restore(&cfg, file, *force).await;
@@ -48,6 +55,7 @@ async fn main() -> Result<()> {
         Command::ApiKey => app.api_key().await,
         Command::RssToken => app.rss_token().await,
         Command::Backup { file } => app.backup(&file).await,
+        Command::Healthcheck => unreachable!("handled before the app is opened"),
         Command::Restore { .. } => unreachable!("handled before the app is opened"),
     }
 }

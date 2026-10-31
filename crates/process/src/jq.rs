@@ -3,14 +3,13 @@
 //! 設定した人が書くプログラムだが、無限ループや環境変数の読み出しは拒否し、
 //! 出力数・出力量・実行時間に上限を設ける。
 
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
 use jaq_core::load::{Arena, File, Loader};
 use jaq_core::{data, unwrap_valr, Compiler, Ctx, Vars};
 use jaq_json::{read, Val};
 
+use crate::sandbox::{self, SandboxError};
 use crate::ProcessError;
 
 /// 1 つのプログラムから取り出す出力の上限。
@@ -18,8 +17,6 @@ const MAX_OUTPUTS: usize = 10_000;
 /// 出力全体の大きさの上限 (バイト)。
 const MAX_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
 const TIMEOUT: Duration = Duration::from_secs(5);
-/// 時間切れで放置された評価スレッドの同時数の上限。
-const MAX_RUNAWAY: usize = 2;
 
 /// 止まらない・環境や入力を読む可能性のある語。文字列リテラルの中は見ない。
 const FORBIDDEN: &[&str] = &[
@@ -33,13 +30,6 @@ const FORBIDDEN: &[&str] = &[
     "halt",
     "halt_error",
 ];
-
-/// 時間切れで放置されたまま、まだ動いている評価スレッドの数。
-static ABANDONED: AtomicUsize = AtomicUsize::new(0);
-
-const RUNNING: u8 = 0;
-const GAVE_UP: u8 = 1;
-const FINISHED: u8 = 2;
 
 fn invalid(msg: impl Into<String>) -> ProcessError {
     ProcessError::InvalidJq(msg.into())
@@ -142,38 +132,12 @@ pub(crate) fn run_with_timeout(
         return Err(invalid("empty program"));
     }
     reject_forbidden(program)?;
-    // 時間切れのまま走り続けているスレッドが溜まっているときは、新しく始めない。
-    if ABANDONED.load(Ordering::SeqCst) >= MAX_RUNAWAY {
-        return Err(invalid("earlier jq evaluations are still running"));
-    }
-    let (tx, rx) = mpsc::channel();
-    let state = Arc::new(AtomicU8::new(RUNNING));
-    let thread_state = Arc::clone(&state);
     let (program, body) = (program.to_string(), body.to_string());
-    // 止められないので専用スレッドで走らせ、時間切れなら待つのをやめる。
-    std::thread::spawn(move || {
-        let result = evaluate(&program, &body);
-        // 見放されたあとに終わった場合だけ、放置数を戻す
-        if thread_state.swap(FINISHED, Ordering::SeqCst) == GAVE_UP {
-            ABANDONED.fetch_sub(1, Ordering::SeqCst);
-        }
-        let _ = tx.send(result);
-    });
-    match rx.recv_timeout(timeout) {
+    match sandbox::run(timeout, move || evaluate(&program, &body)) {
         Ok(result) => result,
-        Err(_) => {
-            let gave_up = state
-                .compare_exchange(RUNNING, GAVE_UP, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok();
-            if gave_up {
-                ABANDONED.fetch_add(1, Ordering::SeqCst);
-                Err(invalid("evaluation timed out"))
-            } else {
-                // 時間切れの直前に終わっていた
-                rx.recv()
-                    .unwrap_or_else(|_| Err(invalid("evaluation failed")))
-            }
-        }
+        Err(SandboxError::TimedOut) => Err(invalid("evaluation timed out")),
+        Err(SandboxError::Busy) => Err(invalid("earlier jq evaluations are still running")),
+        Err(SandboxError::Panicked) => Err(invalid("evaluation failed")),
     }
 }
 

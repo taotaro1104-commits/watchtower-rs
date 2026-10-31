@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -140,15 +141,33 @@ impl HttpFetcher {
             buf.extend_from_slice(&chunk);
         }
 
+        let (body, raw) = if is_pdf(content_type.as_deref(), &buf) {
+            (String::new(), Some(Bytes::from(buf)))
+        } else {
+            (charset::decode(&buf, content_type.as_deref()), None)
+        };
         Ok(FetchResponse {
             status,
             headers,
-            body: charset::decode(&buf, content_type.as_deref()),
+            body,
+            raw,
             content_type,
             screenshot: None,
             final_url,
         })
     }
+}
+
+/// PDF か。Content-Type が PDF なら無条件に、そうでなければ先頭が `%PDF-` のときだけ
+/// (HTML の本文中に `%PDF-` があっても誤検出しない)。
+fn is_pdf(content_type: Option<&str>, bytes: &[u8]) -> bool {
+    let mime = content_type
+        .and_then(|c| c.split(';').next())
+        .map(|m| m.trim().to_ascii_lowercase());
+    matches!(
+        mime.as_deref(),
+        Some("application/pdf" | "application/x-pdf")
+    ) || bytes.trim_ascii_start().starts_with(b"%PDF-")
 }
 
 fn map_err(e: reqwest::Error) -> FetchError {

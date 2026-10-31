@@ -6,7 +6,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use url::Url;
 use uuid::Uuid;
+use watchtower_core::config::{fetch_backend_name, parse_fetch_backend};
 use watchtower_core::effective::{MAX_INTERVAL_SECS, MIN_INTERVAL_SECS};
+use watchtower_core::steps::validate_steps;
 use watchtower_core::Watch;
 use watchtower_notify::NotifyTarget;
 
@@ -73,6 +75,12 @@ pub struct WatchBody {
     /// 指定すると設定、`null` で解除、省略すると変更しない。
     #[serde(default, deserialize_with = "present_or_null")]
     pub price_below: Option<Option<f64>>,
+    /// `system` / `html_requests` / `html_webdriver` (本家互換)。省略すると変更しない。
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub fetch_backend: Option<Option<String>>,
+    /// ブラウザ操作ステップ。指定すると全体を置き換える (`[]` で解除)。省略すると変更しない。
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub browser_steps: Option<Option<Vec<watchtower_core::BrowserStep>>>,
 }
 
 /// 「省略」と「null」を区別する (`Some(None)` が null)。
@@ -180,6 +188,30 @@ impl WatchBody {
         if let Some(m) = self.notification_muted {
             next.config.notify_muted = m.then_some(true);
         }
+        if let Some(name) = &self.fetch_backend {
+            // null や空文字は不正 (継承したいときは "system")
+            let parsed = name
+                .as_deref()
+                .filter(|n| !n.is_empty())
+                .and_then(parse_fetch_backend);
+            next.config.use_browser =
+                parsed.ok_or_else(|| ApiError::bad_request("unknown fetch_backend"))?;
+        }
+        if let Some(steps) = &self.browser_steps {
+            // null は不正 (解除したいときは `[]`)
+            let steps = steps
+                .as_ref()
+                .ok_or_else(|| ApiError::bad_request("browser_steps must be an array"))?;
+            // 入力した文字列はエラーに載せない (パスワードが入りうる)
+            validate_steps(steps)
+                .map_err(|e| ApiError::bad_request(format!("browser_steps: {e}")))?;
+            next.config.browser_steps = steps.clone();
+        }
+        if !next.config.browser_steps.is_empty() && next.config.use_browser == Some(false) {
+            return Err(ApiError::bad_request(
+                "browser_steps need fetch_backend html_webdriver (or an inherited browser)",
+            ));
+        }
         if let Some(p) = self.price_below {
             if p.is_some_and(|p| !p.is_finite() || !(0.0..=MAX_PRICE).contains(&p)) {
                 return Err(ApiError::bad_request(
@@ -228,6 +260,8 @@ pub fn watch_view(w: &Watch) -> Value {
         "notification_urls": w.config.notify_urls,
         "notification_muted": w.config.notify_muted == Some(true),
         "price_below": w.config.price_below,
+        "fetch_backend": fetch_backend_name(w.config.use_browser),
+        "browser_steps": w.config.browser_steps,
         "last_checked": ts(w.state.last_checked_at),
         "last_changed": ts(w.state.last_changed_at),
         "last_error": w.state.last_error.as_ref().map_or(Value::Bool(false), |e| json!(e)),
