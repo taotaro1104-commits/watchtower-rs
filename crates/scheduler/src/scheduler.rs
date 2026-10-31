@@ -10,6 +10,7 @@ use tokio_util::sync::CancellationToken;
 use watchtower_core::WatchId;
 use watchtower_metrics::Metrics;
 
+use crate::host_limits::HostLimits;
 use crate::queue::DueQueue;
 use crate::runner::{CheckRunner, RunReport, ScheduledWatch};
 use crate::SchedulerError;
@@ -78,7 +79,7 @@ struct State {
     jobs: JoinSet<(WatchId, RunReport)>,
     task_ids: HashMap<TaskId, WatchId>,
     global: Arc<Semaphore>,
-    host_sems: HashMap<String, Arc<Semaphore>>,
+    host_sems: HostLimits,
 }
 
 impl Scheduler {
@@ -99,7 +100,7 @@ impl Scheduler {
             jobs: JoinSet::new(),
             task_ids: HashMap::new(),
             global: Arc::new(Semaphore::new(self.cfg.global_concurrency.max(1))),
-            host_sems: HashMap::new(),
+            host_sems: HostLimits::new(self.cfg.per_host_concurrency),
         };
         let job_cancel = CancellationToken::new();
 
@@ -208,12 +209,7 @@ impl Scheduler {
         if !st.in_flight.insert(id) {
             return;
         }
-        let per_host = self.cfg.per_host_concurrency.max(1);
-        let host_sem = st
-            .host_sems
-            .entry(host)
-            .or_insert_with(|| Arc::new(Semaphore::new(per_host)))
-            .clone();
+        let host_sem = st.host_sems.semaphore(&host);
         let global = Arc::clone(&st.global);
         let runner = Arc::clone(&self.runner);
         let (stop, token) = (stop.clone(), job_cancel.clone());
@@ -254,6 +250,11 @@ impl Scheduler {
             }
         };
         st.in_flight.remove(&id);
+        // 終わったジョブのセマフォを手放したので、使われなくなったホストの分を捨てる
+        match st.hosts.get(&id) {
+            Some(host) => st.host_sems.prune(host),
+            None => st.host_sems.prune_idle(),
+        }
         if !st.hosts.contains_key(&id) {
             return; // 実行中に削除された
         }

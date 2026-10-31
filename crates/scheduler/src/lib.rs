@@ -3,6 +3,7 @@
 mod backoff;
 mod checker;
 mod error;
+mod host_limits;
 mod queue;
 mod runner;
 mod scheduler;
