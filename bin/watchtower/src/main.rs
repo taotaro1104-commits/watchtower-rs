@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod config;
 mod healthcheck;
+mod launcher;
 mod notifications;
 mod picker;
 mod web_server;
@@ -42,10 +43,12 @@ async fn main() -> Result<()> {
     if let Command::Restore { file, force } = &cli.command {
         return app::restore(&cfg, file, *force).await;
     }
+    let listen = cfg.listen;
     let app = App::open(cfg).await?;
 
     match cli.command {
         Command::Run => app.run().await,
+        Command::Ui { no_open } => ui(app, listen, no_open).await,
         Command::Watch(WatchCommand::Add(a)) => app.add(a).await,
         Command::Watch(WatchCommand::List) => app.list().await,
         Command::Watch(WatchCommand::Remove { id }) => app.remove(id).await,
@@ -58,4 +61,24 @@ async fn main() -> Result<()> {
         Command::Healthcheck => unreachable!("handled before the app is opened"),
         Command::Restore { .. } => unreachable!("handled before the app is opened"),
     }
+}
+
+/// サーバを動かしたまま、立ち上がりを待って URL を表示し、ブラウザで開く。
+async fn ui(app: App, listen: std::net::SocketAddr, no_open: bool) -> Result<()> {
+    let url = launcher::ui_url(listen);
+    let opener = tokio::spawn(async move {
+        if let Err(e) = launcher::wait_until_up(listen).await {
+            tracing::error!("{e}");
+            return;
+        }
+        println!("{url}");
+        if !no_open {
+            if let Err(e) = launcher::open_browser(&url) {
+                tracing::warn!("could not open the browser: {e}");
+            }
+        }
+    });
+    let result = app.run().await;
+    opener.abort();
+    result
 }

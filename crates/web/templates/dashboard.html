@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - watchtower{% endblock %}
+{% block nav %}<a href="/">All watches</a><a href="/events">History</a>{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="stats">
+  <div class="stat"><span class="num" data-stat="total">{{ total }}</span><span class="muted">watches</span></div>
+  <div class="stat"><span class="num" data-stat="paused">{{ paused }}</span><span class="muted">paused</span></div>
+  <div class="stat{% if failing_count > 0 %} bad{% endif %}"><span class="num" data-stat="failing">{{ failing_count }}</span><span class="muted">failing</span></div>
+  <div class="stat"><span class="num" data-stat="pending">{{ pending }}</span><span class="muted">notifications queued</span></div>
+  <div class="stat{% if failed_notifications > 0 %} bad{% endif %}"><span class="num" data-stat="undelivered">{{ failed_notifications }}</span><span class="muted">notifications failed</span></div>
+</div>
+
+<h2>Failing watches</h2>
+{% if failing.is_empty() %}
+<p class="muted">No failing watches.</p>
+{% else %}
+<table>
+  <thead><tr><th>Watch</th><th>Error</th><th>In a row</th></tr></thead>
+  <tbody>
+  {% for f in failing %}
+    <tr class="failing">
+      <td><a href="/watches/{{ f.id }}">{{ f.label }}</a></td>
+      <td class="error small">{{ f.error }}</td>
+      <td>{{ f.attempts }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Recent changes</h2>
+{% if changes.is_empty() %}
+<p class="muted">No changes detected yet.</p>
+{% else %}
+<table>
+  <thead><tr><th>Time</th><th>Watch</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for c in changes %}
+    <tr>
+      <td class="small">{{ c.at }}</td>
+      <td>{% if let Some(id) = c.watch_id %}{% if c.watch_label.is_empty() %}<span class="muted">(deleted watch)</span>{% else %}<a href="/watches/{{ id }}">{{ c.watch_label }}</a>{% endif %}{% endif %}</td>
+      <td class="small">{{ c.detail }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

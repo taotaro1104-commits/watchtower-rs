@@ -21,6 +21,12 @@ pub struct Cli {
 pub enum Command {
     /// スケジューラを起動して定期チェックを続ける
     Run,
+    /// サーバを起動し、立ち上がったら既定のブラウザで管理画面を開く
+    Ui {
+        /// ブラウザは開かず、URL を表示するだけにする
+        #[arg(long)]
+        no_open: bool,
+    },
     /// ウォッチの管理
     #[command(subcommand)]
     Watch(WatchCommand),

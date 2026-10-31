@@ -1,6 +1,7 @@
 //! Web UI (axum + askama)。認証・CSRF・エスケープ・セキュリティヘッダを備える。
 
 mod auth;
+mod dashboard;
 mod edit;
 mod events;
 mod handlers;
@@ -206,6 +207,7 @@ pub fn router(state: AppState) -> Router {
         .route("/tags", get(tags::list).post(tags::create))
         .route("/tags/{id}/edit", get(tags::edit_page).post(tags::save))
         .route("/tags/{id}/delete", post(tags::delete))
+        .route("/dashboard", get(dashboard::page))
         .route("/events", get(events::events_page))
         .route("/events/stream", get(sse::stream))
         .route("/static/app.js", get(handlers::script))
