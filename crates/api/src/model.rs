@@ -6,12 +6,12 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use url::Url;
 use uuid::Uuid;
-use watchtower_core::config::{fetch_backend_name, parse_fetch_backend};
+use watchtower_core::config::{fetch_backend_name, parse_fetch_backend, MAX_TEMPLATE_CHARS};
 use watchtower_core::effective::{MAX_INTERVAL_SECS, MIN_INTERVAL_SECS};
 use watchtower_core::request::{normalize_method, validate_body, validate_headers, validate_proxy};
 use watchtower_core::steps::validate_steps;
 use watchtower_core::Watch;
-use watchtower_notify::NotifyTarget;
+use watchtower_notify::{NotifyTarget, TemplateSet};
 
 use crate::error::{ApiError, ApiResult};
 
@@ -95,6 +95,12 @@ pub struct WatchBody {
     /// プロキシ (`http://host:port`)。`null` で解除、省略すると変更しない。
     #[serde(default, deserialize_with = "present_or_null")]
     pub proxy: Option<Option<String>>,
+    /// 通知の件名のテンプレート。`null` で既定に戻す、省略すると変更しない。
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub notification_title: Option<Option<String>>,
+    /// 通知の本文のテンプレート。`null` で既定に戻す、省略すると変更しない。
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub notification_body: Option<Option<String>>,
 }
 
 // ヘッダの値・ボディ・プロキシには認証情報が入り得るので、Debug には出さない。
@@ -163,6 +169,34 @@ fn checked_tags(raw: &[String], known: &HashSet<Uuid>) -> ApiResult<Vec<Uuid>> {
 }
 
 impl WatchBody {
+    /// 通知テンプレート。構文と未定義の変数は保存時に確かめる。
+    fn apply_templates(&self, c: &mut watchtower_core::ConfigLayer) -> ApiResult<()> {
+        if self.notification_title.is_none() && self.notification_body.is_none() {
+            return Ok(());
+        }
+        let pick = |new: &Option<Option<String>>, old: &Option<String>| match new {
+            Some(v) => v.clone().filter(|s| !s.trim().is_empty()),
+            None => old.clone(),
+        };
+        let title = pick(&self.notification_title, &c.notification_title);
+        let body = pick(&self.notification_body, &c.notification_body);
+        for (label, part) in [("notification_title", &title), ("notification_body", &body)] {
+            if part
+                .as_ref()
+                .is_some_and(|s| s.chars().count() > MAX_TEMPLATE_CHARS)
+            {
+                return Err(ApiError::bad_request(format!(
+                    "{label} is longer than {MAX_TEMPLATE_CHARS} characters"
+                )));
+            }
+        }
+        TemplateSet::with_overrides(title.as_deref(), body.as_deref())
+            .map_err(|e| ApiError::bad_request(format!("notification template: {e}")))?;
+        c.notification_title = title;
+        c.notification_body = body;
+        Ok(())
+    }
+
     /// 検証してから `w` に反映する。1 つでも不正なら `w` は変更しない。
     pub fn apply(&self, w: &mut Watch, known_tags: &HashSet<Uuid>) -> ApiResult<()> {
         let mut next = w.clone();
@@ -237,6 +271,7 @@ impl WatchBody {
             ));
         }
         self.apply_request_options(&mut next.config)?;
+        self.apply_templates(&mut next.config)?;
         if let Some(p) = self.price_below {
             if p.is_some_and(|p| !p.is_finite() || !(0.0..=MAX_PRICE).contains(&p)) {
                 return Err(ApiError::bad_request(
@@ -324,6 +359,8 @@ pub fn watch_view(w: &Watch) -> Value {
         "headers": w.config.headers.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<_, _>>(),
         "body": w.config.body,
         "proxy": w.config.proxy,
+        "notification_title": w.config.notification_title,
+        "notification_body": w.config.notification_body,
         "last_checked": ts(w.state.last_checked_at),
         "last_changed": ts(w.state.last_changed_at),
         "last_error": w.state.last_error.as_ref().map_or(Value::Bool(false), |e| json!(e)),

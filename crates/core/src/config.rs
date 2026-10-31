@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::steps::BrowserStep;
 
+/// 通知テンプレート (件名・本文) の長さの上限 (文字数)。
+pub const MAX_TEMPLATE_CHARS: usize = 10_000;
+
 /// Watch / Tag / Global の各層が持つ設定。未指定は `None` / 空。
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -29,6 +32,9 @@ pub struct ConfigLayer {
     pub body: Option<String>,
     /// `http://host:port` 形式のプロキシ。
     pub proxy: Option<String>,
+    /// 通知の件名・本文のテンプレート (minijinja)。未指定は既定の文面。
+    pub notification_title: Option<String>,
+    pub notification_body: Option<String>,
 }
 
 // ヘッダの値・ボディ・プロキシには認証情報が入り得るので、Debug には出さない。
@@ -54,6 +60,8 @@ impl std::fmt::Debug for ConfigLayer {
             .field("method", &self.method)
             .field("body", &self.body.as_ref().map(|_| "<hidden>"))
             .field("proxy", &self.proxy.as_ref().map(|_| "<hidden>"))
+            .field("notification_title", &self.notification_title)
+            .field("notification_body", &self.notification_body)
             .finish()
     }
 }

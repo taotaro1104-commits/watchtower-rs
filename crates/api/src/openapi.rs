@@ -46,7 +46,7 @@ const OPERATIONS: &[Operation] = &[
         path: "/api/v1/watch",
         summary: "Create a watch",
         params: &[],
-        body: Some("JSON: url (required), title, paused, tags, time_between_check, include_filters, subtractive_selectors, ignore_text, trigger_text, notification_urls, notification_muted"),
+        body: Some("JSON: url (required), title, paused, tags, time_between_check, include_filters, subtractive_selectors, ignore_text, trigger_text, notification_urls, notification_muted, price_below, fetch_backend (system|html_requests|html_webdriver), browser_steps (array of click/type/wait_for/wait), method, headers (object), body, proxy, notification_title, notification_body (null resets an optional field)"),
         responses: &[("201", "Created; returns the uuid"), ("400", "Invalid input")],
     },
     Operation {

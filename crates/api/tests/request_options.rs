@@ -102,3 +102,41 @@ async fn a_null_time_between_check_goes_back_to_the_default() {
     assert_eq!(r.status, StatusCode::OK, "{}", r.body);
     assert!(get_ok(&a, &path).await.json()["time_between_check"].is_null());
 }
+
+#[tokio::test]
+async fn notification_templates_can_be_set_validated_and_cleared() {
+    let a = api().await;
+    let id = create_watch(
+        &a,
+        json!({
+            "url": "https://example.com/",
+            "notification_title": "Changed: {{ watch_title }}",
+            "notification_body": "{{ diff }}"
+        }),
+    )
+    .await;
+    let path = format!("/api/v1/watch/{id}");
+    let v = get_ok(&a, &path).await.json();
+    assert_eq!(v["notification_title"], "Changed: {{ watch_title }}");
+    assert_eq!(v["notification_body"], "{{ diff }}");
+
+    // 触れない更新では変わらない / 不正なテンプレートは 400 で、元の設定が残る
+    call(&a, Method::PUT, &path, &json!({"title": "x"})).await;
+    for bad in ["{% for %}", "{{ no_such_variable }}"] {
+        let r = call(&a, Method::PUT, &path, &json!({"notification_body": bad})).await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let v = get_ok(&a, &path).await.json();
+    assert_eq!(v["notification_body"], "{{ diff }}");
+
+    let r = call(
+        &a,
+        Method::PUT,
+        &path,
+        &json!({"notification_title": null, "notification_body": null}),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    let v = get_ok(&a, &path).await.json();
+    assert!(v["notification_title"].is_null() && v["notification_body"].is_null());
+}

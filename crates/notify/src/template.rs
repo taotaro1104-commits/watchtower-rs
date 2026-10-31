@@ -84,6 +84,11 @@ impl TemplateSet {
         Ok(set)
     }
 
+    /// 件名と本文の片方 (または両方) だけを差し替える。未指定の側は既定の文面。保存時の検証にも使う。
+    pub fn with_overrides(title: Option<&str>, body: Option<&str>) -> Result<Self, NotifyError> {
+        Self::new(title.unwrap_or(DEFAULT_TITLE), body.unwrap_or(DEFAULT_BODY))
+    }
+
     pub fn render(&self, ctx: &NotificationContext) -> Result<Message, NotifyError> {
         Ok(Message {
             title: render_one(&self.title, ctx)?,

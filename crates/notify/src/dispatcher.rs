@@ -83,7 +83,20 @@ impl Dispatcher {
             current_snapshot: self.current_text(ev.watch_id).await,
             preview_url: format!("{}/preview/{}", self.base_url, watch.id),
         };
-        let msg = self.templates.render(&ctx).unwrap_or_else(|e| {
+        // ウォッチ / タグ / 共通の順に最も近い指定を使う。無ければ全体の既定のテンプレート。
+        let templates = if cfg.notification_title.is_some() || cfg.notification_body.is_some() {
+            TemplateSet::with_overrides(
+                cfg.notification_title.as_deref(),
+                cfg.notification_body.as_deref(),
+            )
+            .unwrap_or_else(|e| {
+                tracing::warn!(watch = %watch.id, "notification template is invalid: {e}");
+                self.templates.clone()
+            })
+        } else {
+            self.templates.clone()
+        };
+        let msg = templates.render(&ctx).unwrap_or_else(|e| {
             // 描画に失敗しても変化の通知自体は落とさない。
             tracing::warn!(watch = %watch.id, "template failed, using default: {e}");
             TemplateSet::default()

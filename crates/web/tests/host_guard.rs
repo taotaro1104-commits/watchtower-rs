@@ -102,3 +102,22 @@ async fn the_middleware_serves_allowed_hosts_and_refuses_others() {
     assert_eq!(st, StatusCode::MISDIRECTED_REQUEST);
     assert!(!body.contains("evil.example"), "{body}");
 }
+
+#[tokio::test]
+async fn the_uri_authority_is_checked_when_there_is_no_host_header() {
+    // HTTP/2 では Host ヘッダの代わりに :authority (URI の authority) が届く
+    let app = Router::new()
+        .route("/", get(|| async { "hello" }))
+        .layer(axum::middleware::from_fn_with_state(policy(&[]), guard));
+    for (authority, expected) in [
+        ("evil.example", StatusCode::MISDIRECTED_REQUEST),
+        ("localhost:5000", StatusCode::OK),
+    ] {
+        let req = Request::builder()
+            .uri(format!("http://{authority}/"))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), expected, "{authority}");
+    }
+}

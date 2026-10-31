@@ -12,13 +12,14 @@ use axum_extra::extract::Form;
 use serde::Deserialize;
 use url::Url;
 use uuid::Uuid;
+use watchtower_core::config::MAX_TEMPLATE_CHARS;
 use watchtower_core::config::{fetch_backend_name, parse_fetch_backend};
 use watchtower_core::request::{
     headers_to_text, normalize_method, parse_headers_text, validate_body, validate_proxy,
 };
 use watchtower_core::steps::{parse_steps_text, steps_to_text};
 use watchtower_core::ConfigLayer;
-use watchtower_notify::NotifyTarget;
+use watchtower_notify::{NotifyTarget, TemplateSet};
 use watchtower_scheduler::Command;
 
 use crate::handlers::{
@@ -59,6 +60,8 @@ struct EditPage {
     req_headers: String,
     req_body: String,
     req_proxy: String,
+    tpl_title: String,
+    tpl_body: String,
     include_filters: String,
     exclude_filters: String,
     ignore_text: String,
@@ -79,6 +82,8 @@ pub(crate) struct ConfigText {
     pub req_headers: String,
     pub req_body: String,
     pub req_proxy: String,
+    pub tpl_title: String,
+    pub tpl_body: String,
     pub include_filters: String,
     pub exclude_filters: String,
     pub ignore_text: String,
@@ -100,6 +105,8 @@ pub(crate) fn config_text(c: &ConfigLayer) -> ConfigText {
         req_headers: headers_to_text(&c.headers),
         req_body: c.body.clone().unwrap_or_default(),
         req_proxy: c.proxy.clone().unwrap_or_default(),
+        tpl_title: c.notification_title.clone().unwrap_or_default(),
+        tpl_body: c.notification_body.clone().unwrap_or_default(),
         include_filters: c.include_filters.join("\n"),
         exclude_filters: c.exclude_filters.join("\n"),
         ignore_text: c.ignore_text.join("\n"),
@@ -152,6 +159,8 @@ pub async fn edit_page(
             req_headers: c.req_headers,
             req_body: c.req_body,
             req_proxy: c.req_proxy,
+            tpl_title: c.tpl_title,
+            tpl_body: c.tpl_body,
             include_filters: c.include_filters,
             exclude_filters: c.exclude_filters,
             ignore_text: c.ignore_text,
@@ -173,6 +182,8 @@ pub(crate) struct ConfigInput<'a> {
     pub req_headers: &'a str,
     pub req_body: &'a str,
     pub req_proxy: &'a str,
+    pub tpl_title: &'a str,
+    pub tpl_body: &'a str,
     pub include_filters: &'a str,
     pub exclude_filters: &'a str,
     pub ignore_text: &'a str,
@@ -241,6 +252,28 @@ fn apply_request_options(next: &mut ConfigLayer, input: &ConfigInput) -> Result<
     Ok(())
 }
 
+/// 通知テンプレート。空欄は既定の文面。構文と未定義の変数は保存時に確かめる。
+fn apply_templates(next: &mut ConfigLayer, input: &ConfigInput) -> Result<(), Response> {
+    let part = |raw: &str, label: &str| -> Result<Option<String>, Response> {
+        if raw.trim().is_empty() {
+            return Ok(None);
+        }
+        if raw.chars().count() > MAX_TEMPLATE_CHARS {
+            return Err(bad_request(&format!(
+                "{label}: at most {MAX_TEMPLATE_CHARS} characters."
+            )));
+        }
+        Ok(Some(raw.to_string()))
+    };
+    let title = part(input.tpl_title, "Notification title")?;
+    let body = part(input.tpl_body, "Notification body")?;
+    TemplateSet::with_overrides(title.as_deref(), body.as_deref())
+        .map_err(|e| bad_request(&format!("Notification template: {e}")))?;
+    next.notification_title = title;
+    next.notification_body = body;
+    Ok(())
+}
+
 /// 入力を検証して `c` に反映する。どれか 1 つでも不正なら `c` は変更しない。
 pub(crate) fn apply_config(c: &mut ConfigLayer, input: &ConfigInput) -> Result<(), Response> {
     let mut next = c.clone();
@@ -258,6 +291,7 @@ pub(crate) fn apply_config(c: &mut ConfigLayer, input: &ConfigInput) -> Result<(
         ));
     }
     apply_request_options(&mut next, input)?;
+    apply_templates(&mut next, input)?;
     next.include_filters = lines(input.include_filters, "Include filters")?;
     next.exclude_filters = lines(input.exclude_filters, "Exclude filters")?;
     next.ignore_text = lines(input.ignore_text, "Ignore text")?;
@@ -300,6 +334,10 @@ pub struct EditForm {
     body: String,
     #[serde(default)]
     proxy: String,
+    #[serde(default)]
+    notification_title: String,
+    #[serde(default)]
+    notification_body: String,
     #[serde(default)]
     include_filters: String,
     #[serde(default)]
@@ -394,6 +432,8 @@ fn apply(
             req_headers: &form.headers,
             req_body: &form.body,
             req_proxy: &form.proxy,
+            tpl_title: &form.notification_title,
+            tpl_body: &form.notification_body,
             include_filters: &form.include_filters,
             exclude_filters: &form.exclude_filters,
             ignore_text: &form.ignore_text,

@@ -28,6 +28,8 @@ pub struct EffectiveConfig {
     pub method: String,
     pub body: Option<String>,
     pub proxy: Option<String>,
+    pub notification_title: Option<String>,
+    pub notification_body: Option<String>,
 }
 
 // ヘッダの値・ボディ・プロキシには認証情報が入り得るので、Debug には出さない。
@@ -101,6 +103,8 @@ impl EffectiveConfig {
                 .unwrap_or_else(|| "GET".to_string()),
             body: layers.iter().find_map(|l| l.body.clone()),
             proxy: layers.iter().find_map(|l| l.proxy.clone()),
+            notification_title: layers.iter().find_map(|l| l.notification_title.clone()),
+            notification_body: layers.iter().find_map(|l| l.notification_body.clone()),
             // 不正な値 (NaN・無限大・負) は無視して、下の層の指定に任せる
             price_below: layers
                 .iter()

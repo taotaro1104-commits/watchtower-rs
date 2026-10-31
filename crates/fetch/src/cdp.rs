@@ -562,6 +562,12 @@ impl CdpFetcher {
                 "the browser fetcher only supports GET".into(),
             ));
         }
+        // ブラウザでは送れないものを、黙って無視せずに断る (プロキシを無視すると直接つながってしまう)
+        if req.body.is_some() || req.proxy.is_some() {
+            return Err(FetchError::InvalidRequest(
+                "the browser fetcher does not support a request body or a proxy".into(),
+            ));
+        }
         validate_steps(&req.browser_steps)
             .map_err(|e| FetchError::InvalidRequest(format!("browser steps: {e}")))?;
         // 取得先は、ブラウザに渡す前に検査する (接続もしない)

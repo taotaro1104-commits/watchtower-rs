@@ -84,11 +84,13 @@ impl HostPolicy {
 
 /// 許可されない Host の要求を 421 で断る。値は応答にもログにも載せない。
 pub async fn guard(State(policy): State<HostPolicy>, req: Request, next: Next) -> Response {
-    let host = req
+    // HTTP/2 には Host ヘッダが無く、:authority が URI に入る。どちらもあるときは両方を確かめる
+    let header_host = req
         .headers()
         .get(header::HOST)
         .map(|v| v.to_str().unwrap_or("\u{0}"));
-    if policy.allows(host) {
+    let uri_host = req.uri().authority().map(|a| a.as_str());
+    if policy.allows(header_host) && policy.allows(uri_host) {
         next.run(req).await
     } else {
         tracing::debug!("request refused: unexpected Host header");

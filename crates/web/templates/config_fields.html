@@ -59,4 +59,11 @@
   <label><span class="lbl">Notification URLs (e.g. <code>discord://id/token</code>) &mdash; one per line</span>
     <textarea name="notify_urls" rows="3" autocomplete="off" spellcheck="false">{{ notify_urls }}</textarea>
   </label>
+  <label><span class="lbl">Notification title template (blank = default) &mdash; variables:
+    <code>watch_title</code>, <code>watch_url</code>, <code>diff</code>, <code>diff_added</code>, <code>diff_removed</code>, <code>current_snapshot</code>, <code>preview_url</code></span>
+    <input type="text" name="notification_title" value="{{ tpl_title }}" maxlength="10000" autocomplete="off" spellcheck="false">
+  </label>
+  <label>Notification body template (blank = default)
+    <textarea name="notification_body" rows="4" autocomplete="off" spellcheck="false">{{ tpl_body }}</textarea>
+  </label>
   <label class="check"><input type="checkbox" name="notify_muted"{% if notify_muted %} checked{% endif %}> Mute notifications</label>

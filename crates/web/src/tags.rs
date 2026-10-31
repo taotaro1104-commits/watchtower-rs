@@ -48,6 +48,8 @@ struct TagEditPage {
     req_headers: String,
     req_body: String,
     req_proxy: String,
+    tpl_title: String,
+    tpl_body: String,
     include_filters: String,
     exclude_filters: String,
     ignore_text: String,
@@ -164,6 +166,8 @@ pub async fn edit_page(
         req_headers,
         req_body,
         req_proxy,
+        tpl_title,
+        tpl_body,
         include_filters,
         exclude_filters,
         ignore_text,
@@ -185,6 +189,8 @@ pub async fn edit_page(
             req_headers,
             req_body,
             req_proxy,
+            tpl_title,
+            tpl_body,
             include_filters,
             exclude_filters,
             ignore_text,
@@ -217,6 +223,10 @@ pub struct EditForm {
     body: String,
     #[serde(default)]
     proxy: String,
+    #[serde(default)]
+    notification_title: String,
+    #[serde(default)]
+    notification_body: String,
     #[serde(default)]
     include_filters: String,
     #[serde(default)]
@@ -262,6 +272,8 @@ pub async fn save(
             req_headers: &form.headers,
             req_body: &form.body,
             req_proxy: &form.proxy,
+            tpl_title: &form.notification_title,
+            tpl_body: &form.notification_body,
             include_filters: &form.include_filters,
             exclude_filters: &form.exclude_filters,
             ignore_text: &form.ignore_text,

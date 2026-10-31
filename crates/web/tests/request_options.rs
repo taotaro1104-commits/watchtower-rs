@@ -114,3 +114,50 @@ async fn tags_can_carry_request_options_too() {
         vec![("X-Shop".to_string(), "1".to_string())]
     );
 }
+
+#[tokio::test]
+async fn notification_templates_are_saved_shown_again_and_validated() {
+    let a = app().await;
+    let w = watch();
+    a.store.add_watch(&w).await.unwrap();
+    let cookie = login(&a).await;
+    let path = format!("/watches/{}/edit", w.id);
+
+    let extra = format!(
+        "{BASE}&notification_title={}&notification_body={}",
+        enc("Changed: {{ watch_title }}"),
+        enc("{{ diff }}")
+    );
+    let (status, body) = post_edit(&a, &cookie, &path, &extra).await;
+    assert_eq!(status, StatusCode::SEE_OTHER, "{body}");
+    let c = config_of(&a, &w).await;
+    assert_eq!(
+        c.notification_title.as_deref(),
+        Some("Changed: {{ watch_title }}")
+    );
+    assert_eq!(c.notification_body.as_deref(), Some("{{ diff }}"));
+
+    let page = send(&a, get(&path, Some(&cookie))).await.body;
+    assert!(page.contains("name=\"notification_title\""), "{page}");
+    assert!(
+        page.contains("Changed: {{ watch_title }}") || page.contains("Changed: &#123;&#123;"),
+        "{page}"
+    );
+
+    // 構文の誤り・未定義の変数は保存できず、元の設定が残る
+    for bad in ["{% for %}", "{{ no_such_variable }}"] {
+        let extra = format!("{BASE}&notification_body={}", enc(bad));
+        let (status, _) = post_edit(&a, &cookie, &path, &extra).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    assert_eq!(
+        config_of(&a, &w).await.notification_body.as_deref(),
+        Some("{{ diff }}")
+    );
+
+    // 空欄で既定に戻る
+    let (status, _) = post_edit(&a, &cookie, &path, BASE).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let c = config_of(&a, &w).await;
+    assert!(c.notification_title.is_none() && c.notification_body.is_none());
+}

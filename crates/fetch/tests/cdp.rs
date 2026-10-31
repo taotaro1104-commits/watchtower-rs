@@ -562,3 +562,24 @@ async fn the_number_of_open_tabs_is_limited() {
     assert_eq!(counter.load(Ordering::SeqCst), 4);
     assert_eq!(b.log.lock().unwrap().max_open_targets, 1);
 }
+
+#[tokio::test]
+async fn a_body_or_proxy_is_refused_instead_of_silently_ignored() {
+    let b = start(Behavior::default()).await;
+    for tweak in [
+        (|r: &mut FetchRequest| r.body = Some(b"a=1".to_vec())) as fn(&mut FetchRequest),
+        |r: &mut FetchRequest| r.proxy = Some("http://proxy.example:8080".into()),
+    ] {
+        let mut req = request(PAGE);
+        tweak(&mut req);
+        let err = fetcher(&b)
+            .fetch(&req, CancellationToken::new())
+            .await
+            .unwrap_err();
+        let FetchError::InvalidRequest(msg) = &err else {
+            panic!("{err:?}");
+        };
+        assert!(!msg.contains("proxy.example"), "{msg}");
+    }
+    assert_eq!(b.log.lock().unwrap().connections, 0);
+}
