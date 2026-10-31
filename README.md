@@ -49,7 +49,7 @@ Other commands: `watch list|remove`, `check`, `import`, `rss-token`, `backup`, `
 
 ## Configuration
 
-Settings come from `watchtower.toml` (or `--config`) and `WATCHTOWER_*` environment variables,
+Settings come from `watchtower.toml` (or `--config`; see `watchtower.example.toml`) and `WATCHTOWER_*` environment variables,
 which win. The most useful ones:
 
 | Setting | Default | Meaning |

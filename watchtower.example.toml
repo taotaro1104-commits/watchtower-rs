@@ -1,0 +1,27 @@
+# watchtower-rs の設定例。`watchtower.toml` という名前で実行ファイルのある場所に置くか、
+# `--config <ファイル>` で指定する。同じ項目を環境変数 WATCHTOWER_<項目名> で指定すると、そちらが優先される。
+# 値はすべて既定値。必要なものだけ残して書き換える。
+
+# データ (SQLite とスナップショット) の置き場所
+data_dir = "data"
+# 管理画面と API の待ち受けアドレス。外へ出すときは必ず HTTPS のリバースプロキシの背後に置く
+listen = "127.0.0.1:5000"
+# 通知本文のリンクや RSS の基点。https:// にすると Cookie に Secure が付く
+base_url = "http://localhost:5000"
+# 管理画面と API が受け付ける Host 名 (localhost・IP アドレス・base_url のホストは常に許可)
+allowed_hosts = []
+# SSRF 対策の例外として、取得を許すプライベートアドレス (既定は空 = すべて拒否)
+allowed_ips = []
+
+default_interval_secs = 300
+global_concurrency = 10
+per_host_concurrency = 2
+snapshots_keep = 100
+log_json = true
+
+# すべてのウォッチに送る通知先 (Apprise 形式の URL)
+notify_urls = []
+# 未対応サービスの通知を転送する Apprise API (例: "http://apprise:8000")
+# apprise_api_url = "http://apprise:8000"
+# JavaScript の描画に使う Chrome の DevTools WebSocket。トークンを含み得るので公開しない
+# browser_ws_url = "ws://127.0.0.1:9222/devtools/browser/<id>"
