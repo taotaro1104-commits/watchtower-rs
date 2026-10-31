@@ -4,6 +4,7 @@ pub mod config;
 pub mod effective;
 pub mod error;
 pub mod pick;
+pub mod request;
 pub mod steps;
 pub mod watch;
 

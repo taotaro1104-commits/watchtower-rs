@@ -13,6 +13,9 @@ use serde::Deserialize;
 use url::Url;
 use uuid::Uuid;
 use watchtower_core::config::{fetch_backend_name, parse_fetch_backend};
+use watchtower_core::request::{
+    headers_to_text, normalize_method, parse_headers_text, validate_body, validate_proxy,
+};
 use watchtower_core::steps::{parse_steps_text, steps_to_text};
 use watchtower_core::ConfigLayer;
 use watchtower_notify::NotifyTarget;
@@ -52,6 +55,10 @@ struct EditPage {
     price_below: String,
     fetch_backend: &'static str,
     browser_steps: String,
+    req_method: String,
+    req_headers: String,
+    req_body: String,
+    req_proxy: String,
     include_filters: String,
     exclude_filters: String,
     ignore_text: String,
@@ -68,6 +75,10 @@ pub(crate) struct ConfigText {
     pub price_below: String,
     pub fetch_backend: &'static str,
     pub browser_steps: String,
+    pub req_method: String,
+    pub req_headers: String,
+    pub req_body: String,
+    pub req_proxy: String,
     pub include_filters: String,
     pub exclude_filters: String,
     pub ignore_text: String,
@@ -85,6 +96,10 @@ pub(crate) fn config_text(c: &ConfigLayer) -> ConfigText {
         price_below: c.price_below.map(|p| p.to_string()).unwrap_or_default(),
         fetch_backend: fetch_backend_name(c.use_browser),
         browser_steps: steps_to_text(&c.browser_steps),
+        req_method: c.method.clone().unwrap_or_default(),
+        req_headers: headers_to_text(&c.headers),
+        req_body: c.body.clone().unwrap_or_default(),
+        req_proxy: c.proxy.clone().unwrap_or_default(),
         include_filters: c.include_filters.join("\n"),
         exclude_filters: c.exclude_filters.join("\n"),
         ignore_text: c.ignore_text.join("\n"),
@@ -133,6 +148,10 @@ pub async fn edit_page(
             price_below: c.price_below,
             fetch_backend: c.fetch_backend,
             browser_steps: c.browser_steps,
+            req_method: c.req_method,
+            req_headers: c.req_headers,
+            req_body: c.req_body,
+            req_proxy: c.req_proxy,
             include_filters: c.include_filters,
             exclude_filters: c.exclude_filters,
             ignore_text: c.ignore_text,
@@ -150,6 +169,10 @@ pub(crate) struct ConfigInput<'a> {
     pub price_below: &'a str,
     pub fetch_backend: &'a str,
     pub browser_steps: &'a str,
+    pub req_method: &'a str,
+    pub req_headers: &'a str,
+    pub req_body: &'a str,
+    pub req_proxy: &'a str,
     pub include_filters: &'a str,
     pub exclude_filters: &'a str,
     pub ignore_text: &'a str,
@@ -192,6 +215,32 @@ fn parse_price_below(raw: &str) -> Result<Option<f64>, Response> {
     }
 }
 
+/// 取得オプション (メソッド・ヘッダ・ボディ・プロキシ)。空欄は未指定。エラー文面に入力値は含めない。
+fn apply_request_options(next: &mut ConfigLayer, input: &ConfigInput) -> Result<(), Response> {
+    let method = input.req_method.trim();
+    next.method = if method.is_empty() {
+        None
+    } else {
+        Some(normalize_method(method).map_err(|e| bad_request(&format!("Method: {e}")))?)
+    };
+    next.headers =
+        parse_headers_text(input.req_headers).map_err(|e| bad_request(&format!("Headers: {e}")))?;
+    next.body = if input.req_body.is_empty() {
+        None
+    } else {
+        validate_body(input.req_body).map_err(|e| bad_request(&format!("Body: {e}")))?;
+        Some(input.req_body.to_string())
+    };
+    let proxy = input.req_proxy.trim();
+    next.proxy = if proxy.is_empty() {
+        None
+    } else {
+        validate_proxy(proxy).map_err(|e| bad_request(&format!("Proxy: {e}")))?;
+        Some(proxy.to_string())
+    };
+    Ok(())
+}
+
 /// 入力を検証して `c` に反映する。どれか 1 つでも不正なら `c` は変更しない。
 pub(crate) fn apply_config(c: &mut ConfigLayer, input: &ConfigInput) -> Result<(), Response> {
     let mut next = c.clone();
@@ -208,6 +257,7 @@ pub(crate) fn apply_config(c: &mut ConfigLayer, input: &ConfigInput) -> Result<(
             "Browser steps need the \"Browser\" fetch method (or an inherited one).",
         ));
     }
+    apply_request_options(&mut next, input)?;
     next.include_filters = lines(input.include_filters, "Include filters")?;
     next.exclude_filters = lines(input.exclude_filters, "Exclude filters")?;
     next.ignore_text = lines(input.ignore_text, "Ignore text")?;
@@ -242,6 +292,14 @@ pub struct EditForm {
     fetch_backend: String,
     #[serde(default)]
     browser_steps: String,
+    #[serde(default)]
+    method: String,
+    #[serde(default)]
+    headers: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    proxy: String,
     #[serde(default)]
     include_filters: String,
     #[serde(default)]
@@ -332,6 +390,10 @@ fn apply(
             price_below: &form.price_below,
             fetch_backend: &form.fetch_backend,
             browser_steps: &form.browser_steps,
+            req_method: &form.method,
+            req_headers: &form.headers,
+            req_body: &form.body,
+            req_proxy: &form.proxy,
             include_filters: &form.include_filters,
             exclude_filters: &form.exclude_filters,
             ignore_text: &form.ignore_text,

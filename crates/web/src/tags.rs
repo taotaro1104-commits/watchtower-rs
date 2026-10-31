@@ -44,6 +44,10 @@ struct TagEditPage {
     price_below: String,
     fetch_backend: &'static str,
     browser_steps: String,
+    req_method: String,
+    req_headers: String,
+    req_body: String,
+    req_proxy: String,
     include_filters: String,
     exclude_filters: String,
     ignore_text: String,
@@ -156,6 +160,10 @@ pub async fn edit_page(
         price_below,
         fetch_backend,
         browser_steps,
+        req_method,
+        req_headers,
+        req_body,
+        req_proxy,
         include_filters,
         exclude_filters,
         ignore_text,
@@ -173,6 +181,10 @@ pub async fn edit_page(
             price_below,
             fetch_backend,
             browser_steps,
+            req_method,
+            req_headers,
+            req_body,
+            req_proxy,
             include_filters,
             exclude_filters,
             ignore_text,
@@ -197,6 +209,14 @@ pub struct EditForm {
     fetch_backend: String,
     #[serde(default)]
     browser_steps: String,
+    #[serde(default)]
+    method: String,
+    #[serde(default)]
+    headers: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    proxy: String,
     #[serde(default)]
     include_filters: String,
     #[serde(default)]
@@ -238,6 +258,10 @@ pub async fn save(
             price_below: &form.price_below,
             fetch_backend: &form.fetch_backend,
             browser_steps: &form.browser_steps,
+            req_method: &form.method,
+            req_headers: &form.headers,
+            req_body: &form.body,
+            req_proxy: &form.proxy,
             include_filters: &form.include_filters,
             exclude_filters: &form.exclude_filters,
             ignore_text: &form.ignore_text,

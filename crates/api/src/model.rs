@@ -8,6 +8,7 @@ use url::Url;
 use uuid::Uuid;
 use watchtower_core::config::{fetch_backend_name, parse_fetch_backend};
 use watchtower_core::effective::{MAX_INTERVAL_SECS, MIN_INTERVAL_SECS};
+use watchtower_core::request::{normalize_method, validate_body, validate_headers, validate_proxy};
 use watchtower_core::steps::validate_steps;
 use watchtower_core::Watch;
 use watchtower_notify::NotifyTarget;
@@ -59,7 +60,7 @@ impl TimeBetween {
 }
 
 /// 作成 (POST) と部分更新 (PUT) で共通の本文。PUT では指定したものだけを変える。
-#[derive(Debug, Default, Deserialize)]
+#[derive(Default, Deserialize)]
 pub struct WatchBody {
     pub url: Option<String>,
     pub title: Option<String>,
@@ -81,6 +82,27 @@ pub struct WatchBody {
     /// ブラウザ操作ステップ。指定すると全体を置き換える (`[]` で解除)。省略すると変更しない。
     #[serde(default, deserialize_with = "present_or_null")]
     pub browser_steps: Option<Option<Vec<watchtower_core::BrowserStep>>>,
+    /// HTTP メソッド。省略すると変更しない。
+    pub method: Option<String>,
+    /// 追加ヘッダ (名前 → 値)。指定すると全体を置き換える (`{}` で解除)。省略すると変更しない。
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub headers: Option<Option<std::collections::BTreeMap<String, String>>>,
+    /// リクエストのボディ。`null` で解除、省略すると変更しない。
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub body: Option<Option<String>>,
+    /// プロキシ (`http://host:port`)。`null` で解除、省略すると変更しない。
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub proxy: Option<Option<String>>,
+}
+
+// ヘッダの値・ボディ・プロキシには認証情報が入り得るので、Debug には出さない。
+impl std::fmt::Debug for WatchBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WatchBody")
+            .field("url", &self.url)
+            .field("title", &self.title)
+            .finish_non_exhaustive()
+    }
 }
 
 /// 「省略」と「null」を区別する (`Some(None)` が null)。
@@ -212,6 +234,7 @@ impl WatchBody {
                 "browser_steps need fetch_backend html_webdriver (or an inherited browser)",
             ));
         }
+        self.apply_request_options(&mut next.config)?;
         if let Some(p) = self.price_below {
             if p.is_some_and(|p| !p.is_finite() || !(0.0..=MAX_PRICE).contains(&p)) {
                 return Err(ApiError::bad_request(
@@ -243,6 +266,39 @@ fn time_between(secs: Option<u64>) -> Value {
     Value::Object(out)
 }
 
+impl WatchBody {
+    /// メソッド・ヘッダ・ボディ・プロキシ。入力した値はエラーに載せない (認証情報が入りうる)。
+    fn apply_request_options(&self, c: &mut watchtower_core::ConfigLayer) -> ApiResult<()> {
+        if let Some(m) = &self.method {
+            c.method = Some(
+                normalize_method(m).map_err(|e| ApiError::bad_request(format!("method: {e}")))?,
+            );
+        }
+        if let Some(h) = &self.headers {
+            let h = h
+                .as_ref()
+                .ok_or_else(|| ApiError::bad_request("headers must be an object"))?;
+            let list: Vec<(String, String)> =
+                h.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            validate_headers(&list).map_err(|e| ApiError::bad_request(format!("headers: {e}")))?;
+            c.headers = list;
+        }
+        if let Some(b) = &self.body {
+            if let Some(b) = b {
+                validate_body(b).map_err(|e| ApiError::bad_request(format!("body: {e}")))?;
+            }
+            c.body = b.clone();
+        }
+        if let Some(p) = &self.proxy {
+            if let Some(p) = p {
+                validate_proxy(p).map_err(|e| ApiError::bad_request(format!("proxy: {e}")))?;
+            }
+            c.proxy = p.clone();
+        }
+        Ok(())
+    }
+}
+
 /// 本家の形式に近い JSON (`last_checked` は UNIX 秒、無ければ 0。`last_error` は無ければ false)。
 pub fn watch_view(w: &Watch) -> Value {
     let ts = |t: Option<time::OffsetDateTime>| t.map_or(0, |t| t.unix_timestamp());
@@ -262,6 +318,10 @@ pub fn watch_view(w: &Watch) -> Value {
         "price_below": w.config.price_below,
         "fetch_backend": fetch_backend_name(w.config.use_browser),
         "browser_steps": w.config.browser_steps,
+        "method": w.config.method.as_deref().unwrap_or("GET"),
+        "headers": w.config.headers.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<_, _>>(),
+        "body": w.config.body,
+        "proxy": w.config.proxy,
         "last_checked": ts(w.state.last_checked_at),
         "last_changed": ts(w.state.last_changed_at),
         "last_error": w.state.last_error.as_ref().map_or(Value::Bool(false), |e| json!(e)),

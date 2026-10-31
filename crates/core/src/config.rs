@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::steps::BrowserStep;
 
 /// Watch / Tag / Global の各層が持つ設定。未指定は `None` / 空。
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ConfigLayer {
     pub check_interval_secs: Option<u64>,
@@ -21,6 +21,41 @@ pub struct ConfigLayer {
     pub use_browser: Option<bool>,
     /// ブラウザ取得でページを読み込んだ後に行う操作。最も近い層の指定がそのまま使われる (連結しない)。
     pub browser_steps: Vec<BrowserStep>,
+    /// 追加の HTTP ヘッダ (名前の大文字小文字は区別しない)。近い層が同名の遠い層を上書きする。
+    pub headers: Vec<(String, String)>,
+    /// HTTP メソッド。未指定は GET。
+    pub method: Option<String>,
+    /// リクエストのボディ。
+    pub body: Option<String>,
+    /// `http://host:port` 形式のプロキシ。
+    pub proxy: Option<String>,
+}
+
+// ヘッダの値・ボディ・プロキシには認証情報が入り得るので、Debug には出さない。
+impl std::fmt::Debug for ConfigLayer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConfigLayer")
+            .field("check_interval_secs", &self.check_interval_secs)
+            .field("timeout_secs", &self.timeout_secs)
+            .field("max_body_bytes", &self.max_body_bytes)
+            .field("include_filters", &self.include_filters)
+            .field("exclude_filters", &self.exclude_filters)
+            .field("ignore_text", &self.ignore_text)
+            .field("trigger_text", &self.trigger_text)
+            .field("notify_urls", &self.notify_urls.len())
+            .field("notify_muted", &self.notify_muted)
+            .field("price_below", &self.price_below)
+            .field("use_browser", &self.use_browser)
+            .field("browser_steps", &self.browser_steps)
+            .field(
+                "headers",
+                &self.headers.iter().map(|h| &h.0).collect::<Vec<_>>(),
+            )
+            .field("method", &self.method)
+            .field("body", &self.body.as_ref().map(|_| "<hidden>"))
+            .field("proxy", &self.proxy.as_ref().map(|_| "<hidden>"))
+            .finish()
+    }
 }
 
 /// 取得方法の名前 (本家 changedetection.io の `fetch_backend` と同じ)。

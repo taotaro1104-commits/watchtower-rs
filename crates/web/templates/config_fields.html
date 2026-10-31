@@ -19,6 +19,28 @@
     <textarea name="browser_steps" rows="4" autocomplete="off" spellcheck="false">{{ browser_steps }}</textarea>
   </label>
 
+  <h2>Request</h2>
+  <label>Method (blank = GET)
+    <select name="method">
+      <option value=""{% if req_method.is_empty() %} selected{% endif %}>GET (default)</option>
+      <option value="POST"{% if req_method == "POST" %} selected{% endif %}>POST</option>
+      <option value="PUT"{% if req_method == "PUT" %} selected{% endif %}>PUT</option>
+      <option value="PATCH"{% if req_method == "PATCH" %} selected{% endif %}>PATCH</option>
+      <option value="DELETE"{% if req_method == "DELETE" %} selected{% endif %}>DELETE</option>
+      <option value="HEAD"{% if req_method == "HEAD" %} selected{% endif %}>HEAD</option>
+      <option value="GET"{% if req_method == "GET" %} selected{% endif %}>GET</option>
+    </select>
+  </label>
+  <label><span class="lbl">Extra headers &mdash; one per line: <code>Name: value</code></span>
+    <textarea name="headers" rows="3" autocomplete="off" spellcheck="false">{{ req_headers }}</textarea>
+  </label>
+  <label>Request body
+    <textarea name="body" rows="3" autocomplete="off" spellcheck="false">{{ req_body }}</textarea>
+  </label>
+  <label>Proxy (<code>http://host:port</code>, blank = direct)
+    <input type="text" name="proxy" value="{{ req_proxy }}" maxlength="500" autocomplete="off" spellcheck="false">
+  </label>
+
   <h2>Filters</h2>
   <label><span class="lbl">Include (CSS selector, or <code>json:$.path</code>) &mdash; one per line</span>
     <textarea name="include_filters" rows="3">{{ include_filters }}</textarea>

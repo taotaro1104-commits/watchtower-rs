@@ -10,7 +10,7 @@ pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 pub const DEFAULT_MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
 
 /// 層をマージした最終設定。マージ規則はここに集約する。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct EffectiveConfig {
     pub check_interval_secs: u64,
     pub timeout_secs: u64,
@@ -24,6 +24,32 @@ pub struct EffectiveConfig {
     pub price_below: Option<f64>,
     pub use_browser: bool,
     pub browser_steps: Vec<BrowserStep>,
+    pub headers: Vec<(String, String)>,
+    pub method: String,
+    pub body: Option<String>,
+    pub proxy: Option<String>,
+}
+
+// ヘッダの値・ボディ・プロキシには認証情報が入り得るので、Debug には出さない。
+impl std::fmt::Debug for EffectiveConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EffectiveConfig")
+            .field("check_interval_secs", &self.check_interval_secs)
+            .field("timeout_secs", &self.timeout_secs)
+            .field("max_body_bytes", &self.max_body_bytes)
+            .field("notify_muted", &self.notify_muted)
+            .field("price_below", &self.price_below)
+            .field("use_browser", &self.use_browser)
+            .field("browser_steps", &self.browser_steps)
+            .field(
+                "headers",
+                &self.headers.iter().map(|h| &h.0).collect::<Vec<_>>(),
+            )
+            .field("method", &self.method)
+            .field("body", &self.body.as_ref().map(|_| "<hidden>"))
+            .field("proxy", &self.proxy.as_ref().map(|_| "<hidden>"))
+            .finish_non_exhaustive()
+    }
 }
 
 impl EffectiveConfig {
@@ -68,6 +94,13 @@ impl EffectiveConfig {
                 .find(|s| !s.is_empty())
                 .cloned()
                 .unwrap_or_default(),
+            headers: crate::request::merge_headers(layers.iter().map(|l| &l.headers)),
+            method: layers
+                .iter()
+                .find_map(|l| l.method.clone())
+                .unwrap_or_else(|| "GET".to_string()),
+            body: layers.iter().find_map(|l| l.body.clone()),
+            proxy: layers.iter().find_map(|l| l.proxy.clone()),
             // 不正な値 (NaN・無限大・負) は無視して、下の層の指定に任せる
             price_below: layers
                 .iter()

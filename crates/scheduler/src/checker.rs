@@ -114,6 +114,13 @@ impl StoreCheckRunner {
         let mut req = FetchRequest::get(w.url.clone());
         req.timeout = Duration::from_secs(cfg.timeout_secs);
         req.max_body_bytes = cfg.max_body_bytes;
+        req.method = cfg
+            .method
+            .parse()
+            .map_err(|_| "the configured HTTP method is not valid".to_string())?;
+        req.headers = cfg.headers.clone();
+        req.body = cfg.body.as_ref().map(|b| b.clone().into_bytes());
+        req.proxy = cfg.proxy.clone();
         if !cfg.browser_steps.is_empty() && !cfg.use_browser {
             return Err("browser steps need the browser fetch method (html_webdriver)".to_string());
         }
