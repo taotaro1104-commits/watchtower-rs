@@ -67,11 +67,10 @@ pub async fn spawn(
         let policy = SsrfPolicy::with_allowed_ips(cfg.allowed_ips.clone());
         state = state.with_picker(Arc::new(CdpPicker::new(ws, policy)));
     }
-    let api = watchtower_api::router(ApiState::with_metrics(
-        store_for_api,
-        Some(scheduler_for_api),
-        metrics,
-    ));
+    let api = watchtower_api::router(
+        ApiState::with_metrics(store_for_api, Some(scheduler_for_api), metrics)
+            .with_base_url(&cfg.base_url),
+    );
     let app = router(state.clone())
         .merge(api)
         .layer(axum::middleware::from_fn_with_state(hosts, guard));

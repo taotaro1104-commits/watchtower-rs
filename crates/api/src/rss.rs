@@ -123,10 +123,11 @@ pub async fn feed(
     changed.sort_by_key(|w| std::cmp::Reverse(w.state.last_changed_at));
     changed.truncate(MAX_ITEMS);
 
-    let mut xml = String::from(
+    let mut xml = format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss version=\"2.0\"><channel>\
-         <title>watchtower changes</title><link>/</link>\
+         <title>watchtower changes</title><link>{}</link>\
          <description>Pages that changed</description>\n",
+        xml_escape(&state.0.base_url),
     );
     for w in &changed {
         let at = w.state.last_changed_at.expect("filtered above");

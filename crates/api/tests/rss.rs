@@ -249,3 +249,22 @@ async fn watches_with_unreadable_snapshots_still_appear() {
     let token = a.state.rotate_rss_token().await.unwrap();
     assert_eq!(items(&feed(&a, &token).await.body), ["Gone"]);
 }
+
+#[tokio::test]
+async fn the_channel_link_points_at_the_configured_base_url() {
+    let mut a = api().await;
+    let token = a.state.rotate_rss_token().await.unwrap();
+
+    let xml = feed(&a, &token).await.body;
+    assert!(xml.contains("<link>/</link>"), "{xml}");
+
+    a.router = watchtower_api::router(a.state.clone().with_base_url("https://watch.example.com/"));
+    let xml = feed(&a, &token).await.body;
+    assert!(
+        xml.contains(
+            "<channel><title>watchtower changes</title><link>https://watch.example.com/</link>"
+        ),
+        "{xml}"
+    );
+    assert_eq!(items(&xml).len(), 0);
+}

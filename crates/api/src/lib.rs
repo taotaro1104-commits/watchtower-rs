@@ -42,6 +42,8 @@ struct Inner {
     scheduler: Option<mpsc::Sender<Command>>,
     started: Instant,
     metrics: Arc<Metrics>,
+    /// RSS のチャンネルのリンクなど、外から見える自分の基点 URL。
+    base_url: String,
 }
 
 #[derive(Clone)]
@@ -63,6 +65,24 @@ impl ApiState {
             scheduler,
             started: Instant::now(),
             metrics,
+            base_url: "/".to_string(),
+        }))
+    }
+
+    /// 外から見える基点 URL (`http(s)://` で始まるものだけ受け付け、それ以外は無視する)。
+    pub fn with_base_url(self, base_url: &str) -> Self {
+        let base = base_url.trim().trim_end_matches('/');
+        let lower = base.to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return self;
+        }
+        let i = &self.0;
+        Self(Arc::new(Inner {
+            store: i.store.clone(),
+            scheduler: i.scheduler.clone(),
+            started: i.started,
+            metrics: Arc::clone(&i.metrics),
+            base_url: format!("{base}/"),
         }))
     }
 
