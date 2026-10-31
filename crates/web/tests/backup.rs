@@ -98,18 +98,26 @@ async fn the_settings_page_offers_the_download() {
     assert!(r.body.contains("action=\"/settings/backup\""), "{}", r.body);
 }
 
+/// 一時フォルダにある、バックアップが作る作業用コピー (`copy.db`) を持つフォルダ。
+/// 一時フォルダ全体の件数は他のプロセスの動きで揺れるので、バックアップ固有の目印だけを数える。
+fn leftover_copies() -> std::collections::HashSet<std::path::PathBuf> {
+    std::fs::read_dir(std::env::temp_dir())
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.join("copy.db").exists())
+        .collect()
+}
+
 #[tokio::test]
 async fn no_temporary_files_are_left_behind() {
     let a = app().await;
     let cookie = login(&a).await;
     let t = enc(&csrf(&a, &cookie).await);
-    let before = std::fs::read_dir(std::env::temp_dir()).unwrap().count();
+    let before = leftover_copies();
     let (status, _, _) = download(&a, &cookie, &format!("csrf={t}")).await;
     assert_eq!(status, StatusCode::OK);
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    let after = std::fs::read_dir(std::env::temp_dir()).unwrap().count();
-    assert!(
-        after <= before + 1,
-        "temp dir grew from {before} to {after}"
-    );
+    let new: Vec<_> = leftover_copies().difference(&before).cloned().collect();
+    assert!(new.is_empty(), "left behind: {new:?}");
 }

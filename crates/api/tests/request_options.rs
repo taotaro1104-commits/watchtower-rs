@@ -76,3 +76,29 @@ async fn bad_options_are_a_400_and_never_echo_secrets() {
     }
     assert_eq!(get_ok(&a, &path).await.json()["method"], "GET");
 }
+
+#[tokio::test]
+async fn a_null_time_between_check_goes_back_to_the_default() {
+    let a = api().await;
+    let id = create_watch(
+        &a,
+        json!({"url": "https://example.com/", "time_between_check": {"minutes": 5}}),
+    )
+    .await;
+    let path = format!("/api/v1/watch/{id}");
+    assert_eq!(
+        get_ok(&a, &path).await.json()["time_between_check"]["minutes"],
+        5
+    );
+
+    // 触れない更新では変わらない
+    call(&a, Method::PUT, &path, &json!({"title": "x"})).await;
+    assert_eq!(
+        get_ok(&a, &path).await.json()["time_between_check"]["minutes"],
+        5
+    );
+
+    let r = call(&a, Method::PUT, &path, &json!({"time_between_check": null})).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    assert!(get_ok(&a, &path).await.json()["time_between_check"].is_null());
+}

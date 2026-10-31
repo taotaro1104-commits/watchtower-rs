@@ -66,7 +66,9 @@ pub struct WatchBody {
     pub title: Option<String>,
     pub paused: Option<bool>,
     pub tags: Option<Vec<String>>,
-    pub time_between_check: Option<TimeBetween>,
+    /// 指定すると設定、`null` で既定値に戻す、省略すると変更しない。
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub time_between_check: Option<Option<TimeBetween>>,
     pub include_filters: Option<Vec<String>>,
     pub subtractive_selectors: Option<Vec<String>>,
     pub ignore_text: Option<Vec<String>>,
@@ -181,7 +183,7 @@ impl WatchBody {
             next.tags = checked_tags(tags, known_tags)?;
         }
         if let Some(tb) = &self.time_between_check {
-            next.config.check_interval_secs = Some(tb.to_secs()?);
+            next.config.check_interval_secs = tb.as_ref().map(TimeBetween::to_secs).transpose()?;
         }
         if let Some(v) = &self.include_filters {
             next.config.include_filters = checked_lines(v, "include_filters")?;
