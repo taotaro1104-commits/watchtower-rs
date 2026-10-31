@@ -21,6 +21,9 @@ services:
       - watchtower-data:/data
     environment:
       WATCHTOWER_BASE_URL: "http://localhost:5000"
+      # 管理画面が受け付ける Host 名 (DNS rebinding 対策)。localhost・IP アドレス・BASE_URL のホストは常に許される。
+      # リバースプロキシの別名で開くときだけ足す:
+      # WATCHTOWER_ALLOWED_HOSTS: '["watch.example.org"]'
       # SSRF 対策の例外: 取得してよいプライベートアドレスを列挙する (既定は空 = すべて拒否)
       # WATCHTOWER_ALLOWED_IPS: '["192.168.1.10"]'
       # 未実装のサービスの通知を転送する Apprise API (下の apprise サービスを使うとき)

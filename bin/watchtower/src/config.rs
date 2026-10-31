@@ -19,6 +19,8 @@ pub struct AppConfig {
     pub snapshots_keep: usize,
     /// SSRF 対策の例外として取得を許可するアドレス。
     pub allowed_ips: Vec<IpAddr>,
+    /// 管理画面と API が受け付ける Host 名 (DNS rebinding 対策)。`localhost`・IP アドレス・`base_url` のホストは常に許す。
+    pub allowed_hosts: Vec<String>,
     pub log_json: bool,
     /// 全ウォッチ共通の通知先 (Apprise 形式 URL)。
     pub notify_urls: Vec<String>,
@@ -44,6 +46,7 @@ impl Default for AppConfig {
             per_host_concurrency: 2,
             snapshots_keep: 100,
             allowed_ips: Vec::new(),
+            allowed_hosts: Vec::new(),
             log_json: true,
             notify_urls: Vec::new(),
             base_url: "http://localhost:5000".into(),

@@ -4,6 +4,7 @@ mod auth;
 mod edit;
 mod events;
 mod handlers;
+pub mod host;
 mod pick;
 mod settings;
 mod sse;

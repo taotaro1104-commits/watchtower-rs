@@ -10,6 +10,7 @@ use watchtower_api::ApiState;
 use watchtower_metrics::Metrics;
 use watchtower_scheduler::Command;
 use watchtower_store::Store;
+use watchtower_web::host::{guard, HostPolicy};
 use watchtower_web::{router, AppState, WebConfig};
 
 use watchtower_fetch::SsrfPolicy;
@@ -52,6 +53,9 @@ pub async fn spawn(
     stop: CancellationToken,
     metrics: Arc<Metrics>,
 ) -> Result<JoinHandle<()>> {
+    // 設定の誤りは待ち受けの前に分かるようにする
+    let hosts = HostPolicy::new(&cfg.base_url, &cfg.allowed_hosts)
+        .with_context(|| "invalid base_url or allowed_hosts")?;
     let listener = tokio::net::TcpListener::bind(cfg.listen)
         .await
         .with_context(|| format!("binding {}", cfg.listen))?;
@@ -68,7 +72,9 @@ pub async fn spawn(
         Some(scheduler_for_api),
         metrics,
     ));
-    let app = router(state.clone()).merge(api);
+    let app = router(state.clone())
+        .merge(api)
+        .layer(axum::middleware::from_fn_with_state(hosts, guard));
     Ok(tokio::spawn(async move {
         let served = axum::serve(
             listener,
